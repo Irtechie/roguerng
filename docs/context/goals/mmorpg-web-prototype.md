@@ -52,10 +52,16 @@ collect-quest-items-and-return loop.
 
 ## Current State
 
-- Current artifact: working prototype (index.html, src/data.js, src/gen.js, src/core.js, src/game.js), canonical copy E:\roguerng, pushed to main through 145d05c.
-- Next allowed action: human eye check of rogue-style look (play: `node scripts/serve.mjs`), then mark complete or request changes
-- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (62/62) 2026-09-04:
-  playability + content batches - species-shaped voxel monsters + 6 new species,
+- Current artifact: working prototype (index.html, src/data.js, src/gen.js, src/core.js, src/game.js), canonical copy E:\roguerng, pushed to main through 7219127.
+- Next allowed action: continue user visual review (play: `node scripts/serve.mjs`), then mark complete or request changes
+- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (65/65) 2026-09-04:
+  graphics batch (pushed e356908..7219127) - facing now sticks after moves/waits for
+  hero and monsters (0023013), bloom postprocessing on emissives (e356908), and real
+  rigged animated GLB characters from KayKit CC0 packs via GLTFLoader + SkeletonUtils
+  (hero-per-class + skeleton/orc/wraith/bandit/zombie/banshee, chest + wall-torch props,
+  Idle/Walk AnimationMixer, voxel fallback) with new-game hero rebuild fix (7219127).
+  2026-09-04 user visual check on live play: "better for sure" (interim positive; U3 stays open).
+  Earlier verified batches (145d05c): species-shaped voxel monsters + 6 new species,
   two-way stairs (< ascend, cameFrom routing, no portal-eject), face movement
   direction, manual saves, town-only regen, M minimap, click-to-walk/use, item
   drop, 12-tier ladders with bosses, ~15% identify chance + mage Identify spell +
