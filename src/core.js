@@ -230,6 +230,7 @@ export class Core {
       case "interact": tookTurn = this.doInteract(); break;
       case "descend": this.doDescend(); break;
       case "equip": this.doEquip(action.uid); break;
+      case "drop": this.doDrop(action.uid); break;
       case "useItem": this.doUseItem(action.uid); break;
       case "travel": this.doTravel(action.target, action.tier); break;
       default: return false;
@@ -254,6 +255,7 @@ export class Core {
     const p = this.player;
     p.facing = { dx, dy };
     const nx = p.x + dx, ny = p.y + dy;
+    const px = p.x, py = p.y;
     const e = this.entityAt(nx, ny);
     if (e && e.type === "monster") return this.playerAttack(e, 1.0) || true;
     if (e && (e.type === "npc" || (e.type === "monster" && e.hp > 0))) return false;
@@ -269,6 +271,7 @@ export class Core {
       } else if (here.type === "entrance") {
         const def = MAPS[here.target];
         const t = Math.min(this.player.unlockedTiers[here.target] || 1, def.tiers);
+        this.player.pendingReturn = { x: px, y: py };
         this.doTravel(here.target, t);
         return true;
       }
@@ -470,12 +473,20 @@ export class Core {
     if (!tier) {
       p.mapKey = target;
       const out = this.getMap(target);
-      p.x = out.spawn.x; p.y = out.spawn.y;
+      const rp = p.outdoorReturn && p.outdoorReturn[target];
+      if (rp && !this.blocked(rp.x, rp.y)) { p.x = rp.x; p.y = rp.y; }
+      else { p.x = out.spawn.x; p.y = out.spawn.y; }
       this.say(`You step out into the ${def.name} outdoors. Find the entrance to delve deeper.`);
       return;
     }
     const maxUnlocked = p.unlockedTiers[target] || 1;
     const t = Math.min(tier, maxUnlocked);
+    const cur = this.getMap(p.mapKey);
+    if (cur.kind === "outdoor") {
+      p.outdoorReturn = p.outdoorReturn || {};
+      p.outdoorReturn[target] = p.pendingReturn || { x: p.x, y: p.y };
+      p.pendingReturn = null;
+    }
     p.mapKey = dungeonKey(target, t);
     const map = this.getMap(p.mapKey);
     p.x = map.spawn.x; p.y = map.spawn.y;
@@ -496,6 +507,17 @@ export class Core {
     const next = this.getMap(p.mapKey);
     p.x = next.spawn.x; p.y = next.spawn.y;
     this.say(`You descend to ${def.name} depth ${tier + 1}. The air grows heavier.`, "#c0a0ff");
+  }
+
+  doDrop(uid) {
+    const p = this.player;
+    const i = p.bag.findIndex(it => it.uid === uid);
+    if (i < 0) { this.say("Nothing in the pack with that mark."); return false; }
+    const it = p.bag.splice(i, 1)[0];
+    const map = this.getMap(p.mapKey);
+    map.entities.push({ type: "item", x: p.x, y: p.y, item: it });
+    this.say(`You drop ${itemLabel(it)}.`, "#c0a0a0");
+    return true;
   }
 
   doEquip(itemUid) {

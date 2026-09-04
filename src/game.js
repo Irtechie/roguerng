@@ -17,14 +17,28 @@ scene.fog = new THREE.Fog(0x05060c, 16, 30);
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 document.getElementById("scene").appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0x9999bb, 0.9));
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x30261c, 0.55));
+scene.add(new THREE.AmbientLight(0x9999bb, 0.35));
 const torch = new THREE.PointLight(0xffc880, 60, 18, 2);
 scene.add(torch);
-const moon = new THREE.DirectionalLight(0x8899ff, 0.6);
+const moon = new THREE.DirectionalLight(0x9db4ff, 0.9);
 moon.position.set(-10, -14, 20);
+moon.castShadow = true;
+moon.shadow.mapSize.set(1024, 1024);
+moon.shadow.camera.near = 1;
+moon.shadow.camera.far = 50;
+for (const [k, v] of [["left", -14], ["right", 14], ["top", 14], ["bottom", -14]]) moon.shadow.camera[k] = v;
+moon.shadow.bias = -0.001;
 scene.add(moon);
+const moonTarget = new THREE.Object3D();
+scene.add(moonTarget);
+moon.target = moonTarget;
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -34,6 +48,44 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
+
+// ---------- atmosphere: sky dome + drifting motes ----------
+
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(90, 16, 12),
+  new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true, fog: false, depthWrite: false })
+);
+{
+  const pos = sky.geometry.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const top = new THREE.Color(0x4c79c2), low = new THREE.Color(0xd8e6f2);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.max(0, pos.getY(i) / 90 * 0.5 + 0.5);
+    tmp.copy(low).lerp(top, Math.pow(t, 0.7));
+    colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+  }
+  sky.geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+}
+sky.visible = false;
+scene.add(sky);
+
+const DUST_N = 110;
+const dustGeo = new THREE.BufferGeometry();
+const dustPos = new Float32Array(DUST_N * 3);
+const dustSeed = new Float32Array(DUST_N);
+for (let i = 0; i < DUST_N; i++) {
+  dustPos[i * 3] = (Math.random() - 0.5) * 26;
+  dustPos[i * 3 + 1] = (Math.random() - 0.5) * 22;
+  dustPos[i * 3 + 2] = Math.random() * 4;
+  dustSeed[i] = Math.random() * Math.PI * 2;
+}
+dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
+  color: 0xffcf80, size: 0.09, transparent: true, opacity: 0.65,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+}));
+scene.add(dust);
 
 // ---------- sprite texture caches (free game-icons + fallback glyphs) ----------
 
@@ -92,6 +144,7 @@ let mapGroup = null;
 let loadedKey = null;
 let floorMesh, wallMesh, floorIndex, wallIndex, mapDims;
 let propMeshes = [];
+let floorAO = null;
 const explored = new Map();
 let visibleSet = new Set();
 
@@ -113,28 +166,43 @@ function buildMapMeshes(map) {
     else if (ch === ".") floors.push({ x, y });
   }
   const outdoor = map.kind === "outdoor";
+  sky.visible = outdoor;
   scene.fog.color.set(outdoor ? 0x7d9cc0 : 0x05060c);
   scene.background.set(outdoor ? 0x8fb0d8 : 0x05060c);
-  moon.intensity = outdoor ? 1.4 : 0.6;
+  moon.intensity = outdoor ? 1.6 : 0.5;
   floorIndex = new Map(); wallIndex = new Map();
   floors.forEach((f, i) => floorIndex.set(f.x + "," + f.y, i));
   walls.forEach((f, i) => wallIndex.set(f.x + "," + f.y, i));
 
   const theme = map.kind === "town" ? "town" : map.mapId;
+  floorAO = new Float32Array(floors.length).fill(1);
+  const isWall = (x, y) => {
+    const k = x + "," + y;
+    return wallIndex.has(k) || (map.grid[y] && map.grid[y][x] === "#");
+  };
   const fgeo = new THREE.BoxGeometry(TILE * 0.98, TILE * 0.98, 0.12);
   const fmat = new THREE.MeshStandardMaterial({ map: tileTexture("floor", theme), roughness: 0.95 });
   floorMesh = new THREE.InstancedMesh(fgeo, fmat, Math.max(floors.length, 1));
+  floorMesh.receiveShadow = true;
   floorMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(floors.length, 1) * 3), 3);
   const m = new THREE.Matrix4();
   floors.forEach((f, i) => {
     m.makeTranslation(wx(f.x, map.w), wy(f.y, map.h), 0);
     floorMesh.setMatrixAt(i, m);
+    let n = 0;
+    if (isWall(f.x + 1, f.y)) n++;
+    if (isWall(f.x - 1, f.y)) n++;
+    if (isWall(f.x, f.y + 1)) n++;
+    if (isWall(f.x, f.y - 1)) n++;
+    floorAO[i] = 1 - Math.min(0.42, n * 0.14);
   });
   mapGroup.add(floorMesh);
 
   const wgeo = new THREE.BoxGeometry(TILE * 0.98, TILE * 0.98, 1.2);
   const wmat = new THREE.MeshStandardMaterial({ map: tileTexture("wall", theme), roughness: 0.8, emissive: 0x0c0e1c, emissiveIntensity: 0.35 });
   wallMesh = new THREE.InstancedMesh(wgeo, wmat, Math.max(walls.length, 1));
+  wallMesh.castShadow = true;
+  wallMesh.receiveShadow = true;
   walls.forEach((f, i) => {
     m.makeScale(0.0001, 0.0001, 0.0001);
     m.setPosition(wx(f.x, map.w), wy(f.y, map.h), 0.6);
@@ -146,6 +214,7 @@ function buildMapMeshes(map) {
   const mkProp = (cells, geo, mat, z, scale = 1) => {
     if (!cells.length) return;
     const inst = new THREE.InstancedMesh(geo, mat, cells.length);
+    inst.castShadow = true;
     cells.forEach((f, i) => { m.makeScale(0.0001, 0.0001, 0.0001); m.setPosition(wx(f.x, map.w), wy(f.y, map.h), z); inst.setMatrixAt(i, m); });
     inst.userData.cells = cells;
     inst.userData.z = z;
@@ -185,6 +254,7 @@ function buildMapMeshes(map) {
 }
 
 const floorLit = new THREE.Color(0x2c4436), floorDim = new THREE.Color(0x15201a);
+const aoTmp = new THREE.Color();
 function refreshFov() {
   if (!core.player || !floorMesh) return;
   const map = core.getMap(core.player.mapKey);
@@ -203,7 +273,8 @@ function refreshFov() {
   for (const [k, i] of floorIndex) {
     const [x, y] = k.split(",").map(Number);
     const vis = visibleSet.has(k), dim = exp.has(k);
-    floorMesh.setColorAt(i, vis ? floorLit : floorDim);
+    aoTmp.copy(vis ? floorLit : floorDim).multiplyScalar(floorAO[i] || 1);
+    floorMesh.setColorAt(i, aoTmp);
     m.makeScale(vis || dim ? 1 : 0.0001, vis || dim ? 1 : 0.0001, 1);
     m.setPosition(wx(x, mapDims.w), wy(y, mapDims.h), 0);
     floorMesh.setMatrixAt(i, m);
@@ -257,6 +328,29 @@ function part(group, mat, w, h, d, x, y, z, rz = 0) {
   group.add(p);
   return p;
 }
+
+const eyeMats = new Map();
+function eyeMat(color) {
+  if (!eyeMats.has(color)) eyeMats.set(color, new THREE.MeshStandardMaterial({
+    color, emissive: color, emissiveIntensity: 2.2, fog: false
+  }));
+  return eyeMats.get(color);
+}
+function eyes(g, y, z, spread, size, color = 0xffdd44) {
+  const m = eyeMat(color);
+  for (const sx of [-spread, spread]) {
+    const e = part(g, m, size, size, size * 0.6, sx, y, z);
+    e.userData.noShadow = true;
+  }
+}
+const EYE_POS = {
+  quadruped: [0.51, 0.46, 0.07, 0.05], spider: [0.36, 0.3, 0.05, 0.035],
+  bat: [0, 0.76, 0.06, 0.04, 0xff6666], skeleton: [0.14, 0.9, 0.08, 0.05, 0x88ddff],
+  float: [0.16, 1.38, 0.1, 0.055, 0xff4060], slab: [0.25, 0.7, 0.09, 0.06, 0xffa030],
+  harpy: [0.15, 1.0, 0.08, 0.05], imp: [0.11, 0.62, 0.07, 0.045, 0xff5050],
+  tall: [0.16, 1.27, 0.1, 0.055, 0x9fdcff], brute: [0.17, 0.97, 0.11, 0.06],
+  biped: [0.12, 0.92, 0.09, 0.05, 0xffee99]
+};
 
 const SPECIES = {
   rat: { shape: "quadruped", scale: 0.5 }, bat: { shape: "bat", scale: 0.45 },
@@ -372,6 +466,8 @@ function makeVoxel(speciesId, glyph, color, isBoss) {
       part(g, dark, 0.09, 0.16, 0.09, -0.11, 0.1, 1.08);
       part(g, dark, 0.09, 0.16, 0.09, 0.11, 0.1, 1.08);
   }
+  const ep = EYE_POS[sp.shape];
+  if (ep) eyes(g, ep[0], ep[1], ep[2], ep[3], ep[4]);
   g.scale.setScalar(sp.scale);
   g.userData.voxel = true;
   g.userData.species = speciesId || sp.shape;
@@ -379,18 +475,46 @@ function makeVoxel(speciesId, glyph, color, isBoss) {
   return g;
 }
 
+function applyShadows(g) {
+  g.traverse(o => { if (o.isMesh && !o.userData.noShadow) o.castShadow = true; });
+}
+function addBlobShadow(g, r) {
+  const blob = new THREE.Mesh(new THREE.CircleGeometry(r, 14),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
+  blob.position.z = 0.02;
+  blob.userData.noShadow = true;
+  g.add(blob);
+}
+
 function makePlayerVoxel(classId, color) {
   const g = makeVoxel("hero", "@", color);
   const mat = new THREE.MeshStandardMaterial({ color: 0xd8d8e8, roughness: 0.4, metalness: 0.5 });
-  if (classId === "fighter") part(g, mat, 0.07, 0.07, 0.6, 0.3, 0, 0.6);
-  else if (classId === "mage") {
-    part(g, mat, 0.3, 0.3, 0.35, 0, 0, 1.25);
-    part(g, mat, 0.06, 0.06, 0.65, 0.32, 0, 0.6);
+  const cloth = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.7), roughness: 0.8 });
+  part(g, cloth, 0.44, 0.1, 0.3, 0, 0, 0.3);
+  part(g, cloth, 0.13, 0.13, 0.32, -0.1, 0, 0.15);
+  part(g, cloth, 0.13, 0.13, 0.32, 0.1, 0, 0.15);
+  if (classId === "fighter") {
+    part(g, mat, 0.16, 0.16, 0.2, -0.29, 0, 0.62);
+    part(g, mat, 0.16, 0.16, 0.2, 0.29, 0, 0.62);
+    part(g, mat, 0.09, 0.09, 0.7, 0.34, 0, 0.62);
+    part(g, mat, 0.16, 0.3, 0.02, -0.34, 0.16, 0.55);
+    part(g, mat, 0.38, 0.1, 0.38, 0, 0, 1.12);
+  } else if (classId === "mage") {
+    const hat = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.36, 6), cloth);
+    hat.position.set(0, 0, 1.32);
+    g.add(hat);
+    part(g, mat, 0.3, 0.3, 0.35, 0, 0, 1.62);
+    part(g, mat, 0.06, 0.06, 0.8, 0.34, 0, 0.66);
   } else {
+    part(g, cloth, 0.5, 0.5, 0.34, 0, 0, 0.28);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 16), mat);
     halo.position.set(0, 0, 1.28);
     g.add(halo);
+    part(g, mat, 0.07, 0.07, 0.55, -0.32, 0, 0.58);
+    part(g, mat, 0.18, 0.18, 0.1, -0.32, 0, 0.9);
   }
+  addBlobShadow(g, 0.36);
+  applyShadows(g);
   return g;
 }
 
@@ -423,6 +547,8 @@ function rebuildEntities() {
     const vis = visibleSet.has(e.x + "," + e.y);
     if (!pool.has(key)) {
       const g = makeVoxel(e.monsterId, e.glyph, e.color, e.isBoss);
+      addBlobShadow(g, 0.4);
+      applyShadows(g);
       g.userData.bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.07),
         new THREE.MeshBasicMaterial({ color: 0xff4040 }));
       g.userData.bar.visible = false;
@@ -488,6 +614,7 @@ function renderInventory(s) {
     let btn = "";
     if (["weapon", "armor", "trinket"].includes(it.kind)) btn = `<button data-act="equip" data-uid="${it.uid}">Equip</button>`;
     if (it.kind === "potion" || it.kind === "book") btn = `<button data-act="use" data-uid="${it.uid}">Use</button>`;
+    btn += ` <button data-act="drop" data-uid="${it.uid}">Drop</button>`;
     const ic = it.icon ? `<img src="assets/img/${it.icon}.png" class="ic" style="filter: invert(1);">` : it.glyph;
     return `<div class="row" style="color:${it.color}">${ic} ${it.label} ${btn}</div>`;
   }).join("") || "<div class='row'>empty</div>";
@@ -497,6 +624,7 @@ el("inv").addEventListener("click", e => {
   if (!b) return;
   const uid = Number(b.dataset.uid);
   if (b.dataset.act === "equip") core.act({ type: "equip", uid });
+  else if (b.dataset.act === "drop") core.act({ type: "drop", uid });
   else core.act({ type: "useItem", uid });
   afterAction();
 });
@@ -563,6 +691,60 @@ function drawMinimap() {
   dot(core.player.x, core.player.y, "#ffffff", Math.max(2.5, s * 0.7));
 }
 
+let autoGen = 0;
+const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const ray = new THREE.Raycaster();
+const hitPt = new THREE.Vector3();
+
+function clickTile(tx, ty) {
+  const gen = ++autoGen;
+  return (async () => {
+    if (core.screen !== "play" || core.dead || !mapDims) return "nope";
+    for (let i = 0; i < 240; i++) {
+      if (gen !== autoGen || core.dead) return "cancelled";
+      const map = core.getMap(core.player.mapKey);
+      const p = core.player;
+      const dx = tx - p.x, dy = ty - p.y;
+      const cheb = Math.max(Math.abs(dx), Math.abs(dy));
+      const isStairs = map.stairs && tx === map.stairs.x && ty === map.stairs.y;
+      if (isStairs && cheb <= 1) { core.act({ type: "descend" }); afterAction(); return "used"; }
+      const ent = core.entityAt(tx, ty);
+      if (ent && ent.type === "monster" && cheb >= 1) {
+        core.act({ type: "move", dx: Math.sign(dx), dy: Math.sign(dy) });
+        afterAction();
+        if (!core.entityAt(tx, ty)) continue;
+        if (cheb === 1) return "used";
+        continue;
+      }
+      if ((ent && (ent.type === "npc" || ent.type === "entrance")) && cheb <= 1) {
+        core.act({ type: "interact" }); afterAction(); return "used";
+      }
+      if (cheb === 0) return "arrived";
+      if (map.key !== core.player.mapKey) return "moved-maps";
+      const sleepMs = 45;
+      if (!core.stepTowards(tx, ty)) { afterAction(); return "stuck"; }
+      afterAction();
+      await new Promise(r => setTimeout(r, sleepMs));
+    }
+    return "timeout";
+  })();
+}
+
+renderer.domElement.addEventListener("click", ev => {
+  if (core.screen !== "play" || !mapDims) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+    -((ev.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  ray.setFromCamera(ndc, camera);
+  if (!ray.ray.intersectPlane(clickPlane, hitPt)) return;
+  const gx = Math.round(hitPt.x + mapDims.w / 2 - 0.5);
+  const gy = Math.round(-hitPt.y + mapDims.h / 2 - 0.5);
+  if (gx < 0 || gy < 0 || gx >= mapDims.w || gy >= mapDims.h) return;
+  clickTile(gx, gy);
+});
+
 // ---------- input ----------
 
 const MOVE = {
@@ -610,6 +792,7 @@ function afterAction() {
 
 window.addEventListener("keydown", e => {
   if (core.screen !== "play") return;
+  autoGen++;
   if (core.dead) { if (e.key === "Enter") { core.act({ type: "revive" }); afterAction(); } return; }
   if (MOVE[e.key]) { core.act({ type: "move", dx: MOVE[e.key][0], dy: MOVE[e.key][1] }); afterAction(); e.preventDefault(); }
   else if (e.key === "." || e.key === "5") { core.act({ type: "move", dx: 0, dy: 0 }); afterAction(); }
@@ -639,6 +822,21 @@ function loop() {
   camera.position.lerp(camPos, 0.12);
   camera.lookAt(camTarget.clone().lerp(new THREE.Vector3(px, py, 0), 1));
   torch.position.set(px, py, 3.5);
+  const tsec = performance.now() / 1000;
+  torch.intensity = 55 + 7 * Math.sin(tsec * 7.3) + 5 * Math.sin(tsec * 13.1 + 2);
+  moon.position.set(px - 9, py - 11, 15);
+  moonTarget.position.set(px, py, 0);
+  moonTarget.updateMatrixWorld();
+  sky.position.set(px, py, 0);
+  dust.position.set(px, py, 0);
+  dust.material.color.set(map.kind === "outdoor" || map.kind === "town" ? 0xa0e8b0 : 0xffa050);
+  for (let i = 0; i < DUST_N; i++) {
+    let z = dustPos[i * 3 + 2] + 0.012 + 0.008 * Math.sin(dustSeed[i]);
+    if (z > 4.5) z = 0.1;
+    dustPos[i * 3 + 2] = z;
+    dustPos[i * 3] += Math.sin(tsec * 0.8 + dustSeed[i]) * 0.004;
+  }
+  dustGeo.attributes.position.needsUpdate = true;
   renderer.render(scene, camera);
   const now = performance.now();
   if (mapOpen && now - mmLast > 250) { mmLast = now; drawMinimap(); }
@@ -669,6 +867,7 @@ window.game = {
     return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
   },
   toggleMap: () => { mapOpen = !mapOpen; mmCanvas.style.display = mapOpen ? "block" : "none"; drawMinimap(); return mapOpen; },
+  clickTile,
   hasSave: () => !!localStorage.getItem(Core.SAVE_KEY),
   exportDemoGlb: () => new Promise((resolve, reject) => {
     if (!playerSprite) return reject(new Error("no hero yet"));

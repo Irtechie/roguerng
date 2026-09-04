@@ -229,6 +229,43 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("M opens a minimap of the explored area", mapUi.on && mapUi.visible && mapUi.painted,
     JSON.stringify(mapUi));
 
+  const dropTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.player.bag.push({ uid: 990011, kind: "potion", name: "Test Draught", glyph: "!", color: "#ffffff" });
+    const before = g.items().length, bagBefore = g.status().player.bag.length;
+    g.act({ type: "drop", uid: 990011 });
+    return { before, after: g.items().length, bagBefore, bagAfter: g.status().player.bag.length };
+  });
+  check("dropping an item leaves it on the floor", dropTest.after === dropTest.before + 1 && dropTest.bagAfter === dropTest.bagBefore - 1,
+    JSON.stringify(dropTest));
+
+  const doorMemory = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.act({ type: "travel", target: "greenhills" });
+    const ent = c.getMap("greenhills").entities.find(e => e.type === "entrance");
+    const rx = ent.x, ry = ent.y - 1;
+    if (c.blocked(rx, ry)) return { ok: false, reason: "entrance walled" };
+    c.player.x = rx; c.player.y = ry;
+    c.act({ type: "move", dx: 0, dy: 1 });
+    const inDungeon = c.player.mapKey;
+    for (let i = 0; i < 6 && c.player.mapKey !== "greenhills"; i++)
+      c.act({ type: "move", dx: 0, dy: 0 });
+    return { ok: inDungeon.includes(":d") && c.player.mapKey === "greenhills" && c.player.x === rx && c.player.y === ry,
+      inDungeon, out: c.player.mapKey, pos: [c.player.x, c.player.y], was: [rx, ry] };
+  });
+  check("exiting a dungeon door returns you to the exact tile you entered from", doorMemory.ok,
+    JSON.stringify(doorMemory));
+
+  const clickDown = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    c.act({ type: "travel", target: "greenhills", tier: 1 });
+    const st = g.stairs();
+    const res = await g.clickTile(st.x, st.y);
+    return { res, map: g.status().map.key };
+  });
+  check("clicking the stairs walks you there and takes you down", clickDown.res === "used" && clickDown.map.endsWith(":d2"),
+    JSON.stringify(clickDown));
+
   await page.screenshot({ path: path.join(ROOT, "verify-shot-dungeon.png") });
 
   let questDone = false, itemGrabbed = false;
