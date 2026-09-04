@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "../vendor/GLTFLoader.js";
+import { clone as cloneSkeleton } from "../vendor/SkeletonUtils.js";
 import { GLTFExporter } from "../vendor/GLTFExporter.js";
 import { EffectComposer } from "../vendor/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "../vendor/examples/jsm/postprocessing/RenderPass.js";
@@ -272,16 +273,25 @@ function buildMapMeshes(map) {
       }
       if (!adj) continue;
       const bx = wx(wall.x, map.w), by = wy(wall.y, map.h);
-      const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.3), sconceMat);
-      sconce.position.set(bx + adj[0] * 0.45, by + adj[1] * 0.45, 1);
-      mapGroup.add(sconce);
+      const fx = bx + adj[0] * 0.45, fy = by + adj[1] * 0.45;
+      const torchModel = GLB.torch_lit ? modelInstance("torch_lit", 0.62) : null;
+      if (torchModel) {
+        torchModel.position.set(fx, fy, 0.68);
+        applyShadows(torchModel);
+        mapGroup.add(torchModel);
+      } else {
+        const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.3), sconceMat);
+        sconce.position.set(fx, fy, 1);
+        mapGroup.add(sconce);
+      }
+      const fz = torchModel ? 1.38 : 1.22;
       const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), flameMat);
-      flame.position.set(bx + adj[0] * 0.45, by + adj[1] * 0.45, 1.22);
+      flame.position.set(fx, fy, fz);
       flame.userData.flame = true;
       flames.push(flame);
       mapGroup.add(flame);
       const lit = new THREE.PointLight(glow, 10, 6.5, 2);
-      lit.position.set(bx + adj[0] * 0.6, by + adj[1] * 0.6, 1.2);
+      lit.position.set(bx + adj[0] * 0.6, by + adj[1] * 0.6, fz - 0.05);
       lit.userData.flame = true;
       flames.push(lit);
       mapGroup.add(lit);
@@ -534,6 +544,90 @@ const EYE_POS = {
   biped: [0.15, 0.94, 0.09, 0.05, 0xffee99]
 };
 
+// ---------- real GLB models (KayKit packs, CC0 — assets/models/LICENSE-KayKit.txt) ----------
+const GLB = {};
+const GLB_FILES = {
+  Knight: "assets/models/Knight.glb",
+  Mage: "assets/models/Mage.glb",
+  Rogue: "assets/models/Rogue.glb",
+  Barbarian: "assets/models/Barbarian.glb",
+  Skeleton_Warrior: "assets/models/Skeleton_Warrior.glb",
+  Skeleton_Mage: "assets/models/Skeleton_Mage.glb",
+  chest: "assets/models/chest.glb",
+  chest_gold: "assets/models/chest_gold.glb",
+  torch_lit: "assets/models/torch_lit.glb"
+};
+const modelStatus = { loaded: {}, failed: [], count: 0, total: Object.keys(GLB_FILES).length, ready: false };
+function onModelsSettled() {
+  if (modelStatus.count < modelStatus.total) return;
+  modelStatus.ready = modelStatus.count === modelStatus.total;
+  for (const obj of pool.values()) if (obj.parent) obj.parent.remove(obj);
+  pool.clear();
+  if (playerSprite) { scene.remove(playerSprite); playerSprite = null; }
+  loadedKey = null;
+}
+for (const [name, url] of Object.entries(GLB_FILES)) {
+  new GLTFLoader().load(url,
+    gltf => { GLB[name] = { scene: gltf.scene, animations: gltf.animations }; modelStatus.loaded[name] = true; modelStatus.count++; onModelsSettled(); },
+    undefined,
+    () => { modelStatus.failed.push(name); modelStatus.count++; onModelsSettled(); });
+}
+
+const pickClip = (anims, patterns) => {
+  for (const re of patterns) { const c = anims.find(a => re.test(a.name)); if (c) return c; }
+  return anims[0];
+};
+
+function modelInstance(name, height) {
+  const src = GLB[name];
+  if (!src) return null;
+  const inner = cloneSkeleton(src.scene);
+  const mats = [];
+  inner.traverse(o => {
+    if (o.isMesh && o.material) { o.material = o.material.clone(); mats.push(o.material); }
+  });
+  const rotator = new THREE.Group();
+  rotator.rotation.x = Math.PI / 2;
+  rotator.add(inner);
+  const g = new THREE.Group();
+  g.add(rotator);
+  g.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(g);
+  const s = height / Math.max(0.001, box.max.z - box.min.z);
+  g.scale.setScalar(s);
+  g.updateMatrixWorld(true);
+  rotator.position.z = -new THREE.Box3().setFromObject(g).min.z / s;
+  g.userData.model = name;
+  g.userData.mats = mats;
+  if (src.animations.length) {
+    const mixer = new THREE.AnimationMixer(inner);
+    const idleClip = pickClip(src.animations, [/^Idle(_B|_C)?$/, /Idle/]);
+    const walkClip = pickClip(src.animations, [/^Walking_A$/, /Walking/, /Walk/]);
+    const idle = mixer.clipAction(idleClip);
+    idle.play();
+    const walk = mixer.clipAction(walkClip);
+    let moving = false;
+    g.userData.setMoving = want => {
+      if (!!want === moving) return;
+      moving = !!want;
+      if (moving) { walk.reset(); walk.play(); walk.crossFadeFrom(idle, 0.18, false); }
+      else { idle.reset(); idle.play(); idle.crossFadeFrom(walk, 0.25, false); }
+    };
+    g.userData.mixer = mixer;
+  }
+  return g;
+}
+
+const MONSTER_MODELS = {
+  skeleton: "Skeleton_Warrior", zombie: "Skeleton_Warrior", wendigo: "Skeleton_Warrior",
+  wraith: "Skeleton_Mage", banshee: "Skeleton_Mage",
+  bandit: "Rogue", goblin: "Barbarian", orc: "Barbarian"
+};
+const CLASS_MODELS = {
+  fighter: "Knight", paladin: "Knight", mage: "Mage", cleric: "Mage",
+  thief: "Rogue", ranger: "Barbarian"
+};
+
 const SPECIES = {
   rat: { shape: "quadruped", scale: 0.5 }, bat: { shape: "bat", scale: 0.45 },
   wolf: { shape: "quadruped", scale: 1.0 }, goblin: { shape: "biped", scale: 0.65 },
@@ -549,9 +643,18 @@ const SPECIES = {
   cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 }
 };
 
-function makeVoxel(speciesId, glyph, color, isBoss) {
+function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly) {
   const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", s: "slime", B: "bandit", z: "zombie", c: "beetle", N: "banshee", D: "drake", "&": "troll" };
   const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
+  const modelName = proceduralOnly ? null : (MONSTER_MODELS[speciesId] || MONSTER_MODELS[byGlyph[glyph]]);
+  if (modelName && GLB[modelName]) {
+    const m = modelInstance(modelName, (known ? known.scale : 1) * (isBoss ? 1.25 : 1) * 1.25);
+    if (m) {
+      if (known && known.shape === "float") m.userData.floats = true;
+      applyShadows(m);
+      return m;
+    }
+  }
   const sp = known || { shape: isBoss ? "brute" : "biped", scale: isBoss ? 1.7 : 1 };
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
@@ -691,6 +794,11 @@ function addBlobShadow(g, r) {
 
 function makeProp(e, dims) {
   const g = new THREE.Group();
+  const chestModel = e.locked ? "chest_gold" : "chest";
+  if (e.kind === "chest" && GLB[chestModel]) {
+    const m = modelInstance(chestModel, 0.52);
+    if (m) { addBlobShadow(m, 0.42); applyShadows(m); return m; }
+  }
   if (e.kind === "chest") {
     const wood = new THREE.MeshStandardMaterial({ color: e.locked ? 0x6a4326 : 0x7a5230, roughness: 0.9, flatShading: true });
     const band = new THREE.MeshStandardMaterial({ color: e.locked ? 0xc0502a : 0xd8b040, metalness: 0.6, roughness: 0.4 });
@@ -722,6 +830,11 @@ function makeProp(e, dims) {
 }
 
 function makePlayerVoxel(classId, color) {
+  const modelName = CLASS_MODELS[classId];
+  if (modelName && GLB[modelName]) {
+    const m = modelInstance(modelName, 1.4);
+    if (m) { addBlobShadow(m, 0.36); applyShadows(m); return m; }
+  }
   const g = makeVoxel("hero", "@", color);
   const mat = new THREE.MeshStandardMaterial({ color: 0xd8d8e8, roughness: 0.4, metalness: 0.5 });
   const cloth = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.7), roughness: 0.8 });
@@ -823,6 +936,7 @@ function rebuildEntities() {
     g.position.y += (ty - g.position.y) * step;
     if (Math.abs(g.position.x - tx) < 0.01) g.position.x = tx;
     if (Math.abs(g.position.y - ty) < 0.01) g.position.y = ty;
+    g.userData.setMoving?.(Math.abs(tx - g.position.x) + Math.abs(ty - g.position.y) > 0.03);
     g.position.z = g.userData.floats ? 0.35 + 0.1 * Math.sin(t * 2.2 + e.x) : 0;
     const bar = g.userData.bar;
     bar.visible = e.hp < e.maxHp;
@@ -849,9 +963,15 @@ function rebuildEntities() {
   if (!playerSprite) {
     playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color);
     playerSprite.userData.voxel = true;
+    const pf0 = core.player.facing || { dx: 1, dy: 0 };
+    playerSprite.rotation.z = Math.atan2(-pf0.dx, pf0.dy);
     scene.add(playerSprite);
   }
-  playerSprite.position.set(wx(core.player.x, mapDims.w), wy(core.player.y, mapDims.h), 0);
+  const ppx = wx(core.player.x, mapDims.w), ppy = wy(core.player.y, mapDims.h);
+  if (Math.abs(playerSprite.position.x - ppx) + Math.abs(playerSprite.position.y - ppy) > 0.02)
+    playerSprite.userData.moveUntil = t + 0.55;
+  playerSprite.position.set(ppx, ppy, 0);
+  playerSprite.userData.setMoving?.(t < (playerSprite.userData.moveUntil || 0));
   const pf = core.player.facing || { dx: 1, dy: 0 };
   const pTarget = Math.atan2(-pf.dx, pf.dy);
   let pd = pTarget - playerSprite.rotation.z;
@@ -950,6 +1070,9 @@ el("create").addEventListener("click", e => {
     core.start(picks.cls, picks.race, el("name").value.trim());
     el("create").style.display = "none";
     loadedKey = null;
+    if (playerSprite) { scene.remove(playerSprite); playerSprite = null; }
+    for (const obj of pool.values()) if (obj.parent) obj.parent.remove(obj);
+    pool.clear();
     afterAction();
   }
 });
@@ -1123,6 +1246,11 @@ function loop() {
   const map = core.getMap(core.player.mapKey);
   if (map.key !== loadedKey) { loadedKey = map.key; buildMapMeshes(map); refreshFov(); }
   rebuildEntities();
+  const sec = performance.now() / 1000;
+  const mdt = Math.min(0.06, sec - (loop.lastSec ?? sec));
+  loop.lastSec = sec;
+  for (const g of pool.values()) if (g.userData.mixer) g.userData.mixer.update(mdt);
+  if (playerSprite?.userData.mixer) playerSprite.userData.mixer.update(mdt);
   const px = wx(core.player.x, mapDims.w), py = wy(core.player.y, mapDims.h);
   const camTarget = new THREE.Vector3(px, py + 1.5, 0);
   const camPos = new THREE.Vector3(px, py - 8.5, 7.5);
@@ -1161,7 +1289,13 @@ window.game = {
   core,
   debugScene: () => mapGroup,
   debugAll: () => scene,
-  create: (c, r, n) => { core.start(c, r, n); loadedKey = null; afterAction(); return core.status(); },
+  create: (c, r, n) => {
+    core.start(c, r, n); loadedKey = null;
+    if (playerSprite) { scene.remove(playerSprite); playerSprite = null; }
+    for (const obj of pool.values()) if (obj.parent) obj.parent.remove(obj);
+    pool.clear();
+    afterAction(); return core.status();
+  },
   status: () => core.status(),
   act: a => core.act(a),
   travel: (t, tier) => { core.act({ type: "travel", target: t, tier }); afterAction(); },
@@ -1187,8 +1321,23 @@ window.game = {
   layoutCount: m => core.layoutCount(m),
   saveGame, tryContinue,
   debugVoxel: id => {
-    const g = makeVoxel(id, "", "#ffffff");
+    const g = makeVoxel(id, "", "#ffffff", false, true);
     return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
+  },
+  debugModels: () => ({ ...modelStatus }),
+  debugModelFor: id => {
+    const g = makeVoxel(id, "", "#888888");
+    return { model: g.userData.model || null, animated: !!g.userData.mixer };
+  },
+  debugSceneModels: () => {
+    const names = [];
+    let hero = null, animated = 0, meshes = 0;
+    if (playerSprite?.userData.model) { hero = playerSprite.userData.model; if (playerSprite.userData.mixer) animated++; }
+    for (const g of pool.values()) {
+      if (g.userData.model) { names.push(g.userData.model); if (g.userData.mixer) animated++; }
+      g.traverse(o => { if (o.isMesh) meshes++; });
+    }
+    return { hero, sceneModels: names, animated, meshes };
   },
   toggleMap: () => { mapOpen = !mapOpen; mmCanvas.style.display = mapOpen ? "block" : "none"; drawMinimap(); return mapOpen; },
   clickTile,

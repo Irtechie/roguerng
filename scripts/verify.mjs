@@ -675,6 +675,33 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("facing sticks after moves/waits, monsters face their step", facingTest.ok, JSON.stringify(facingTest));
 
+  await page.waitForFunction(() => window.game.debugModels().count === window.game.debugModels().total, null, { timeout: 60000 });
+  const modelInfo = await page.evaluate(() => window.game.debugModels());
+  check("all KayKit CC0 GLB models load and parse", modelInfo.ready && modelInfo.failed.length === 0, JSON.stringify(modelInfo));
+
+  await page.evaluate(() => {
+    const g = window.game;
+    g.create("fighter", "human", "Model");
+    g.core.player.level = 6;
+    g.core.player.unlockedTiers.darkfang = 3;
+    g.travel("darkfang", 3);
+  });
+  await new Promise(r => setTimeout(r, 900));
+  const sceneModels = await page.evaluate(() => window.game.debugSceneModels());
+  const species = await page.evaluate(() => ({
+    skeleton: window.game.debugModelFor("skeleton"),
+    orc: window.game.debugModelFor("orc"),
+    wraith: window.game.debugModelFor("wraith"),
+    bandit: window.game.debugModelFor("bandit"),
+    rat: window.game.debugModelFor("rat")
+  }));
+  const mappedOk = ["skeleton", "orc", "wraith", "bandit"].every(k => species[k].model && species[k].animated);
+  const ratProcedural = species.rat.model === null;
+  check("hero and GLB-mapped monsters use rigged animated models",
+    sceneModels.hero === "Knight" && mappedOk && ratProcedural && sceneModels.meshes >= 2,
+    JSON.stringify({ hero: sceneModels.hero, species, meshes: sceneModels.meshes }));
+  await page.screenshot({ path: path.join(ROOT, "verify-shot-models.png") });
+
   check("no page errors during full loop", errors.length === 0, errors.join(" | ").slice(0, 300));
 
   await browser.close();

@@ -5,7 +5,7 @@ import { PNG } from "pngjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let fail = 0;
-for (const f of ["verify-shot-dungeon.png", "verify-shot-town.png"]) {
+for (const f of ["verify-shot-dungeon.png", "verify-shot-town.png", "verify-shot-models.png"]) {
   const png = PNG.sync.read(fs.readFileSync(path.join(root, f)));
   const colors = new Set();
   let lit = 0;
