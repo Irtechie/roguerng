@@ -785,7 +785,7 @@ function rebuildEntities() {
       continue;
     }
     if (e.kind !== "monster") continue;
-    const key = "mon:" + e.x + "," + e.y + ":" + e.name;
+    const key = "mon:" + e.uid;
     seen.add(key);
     const vis = visibleSet.has(e.x + "," + e.y);
     if (!pool.has(key)) {
@@ -798,14 +798,20 @@ function rebuildEntities() {
       entityGroup.add(g);
       g.add(g.userData.bar);
       g.userData.bar.position.set(0, 0, 1.5);
+      g.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0);
+      if (e.facing) g.rotation.z = Math.atan2(-e.facing.dx, e.facing.dy);
       pool.set(key, g);
     }
     const g = pool.get(key);
     g.visible = vis;
     if (!vis) continue;
-    const wobble = Math.sin(t * 5 + e.x * 3 + e.y) * 0.04;
-    g.position.set(wx(e.x, mapDims.w) + wobble, wy(e.y, mapDims.h),
-      g.userData.floats ? 0.35 + 0.1 * Math.sin(t * 2.2 + e.x) : 0);
+    const tx = wx(e.x, mapDims.w), ty = wy(e.y, mapDims.h);
+    const step = Math.min(1, 0.45);
+    g.position.x += (tx - g.position.x) * step;
+    g.position.y += (ty - g.position.y) * step;
+    if (Math.abs(g.position.x - tx) < 0.01) g.position.x = tx;
+    if (Math.abs(g.position.y - ty) < 0.01) g.position.y = ty;
+    g.position.z = g.userData.floats ? 0.35 + 0.1 * Math.sin(t * 2.2 + e.x) : 0;
     const bar = g.userData.bar;
     bar.visible = e.hp < e.maxHp;
     bar.scale.x = Math.max(0.05, e.hp / e.maxHp);

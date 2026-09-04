@@ -643,6 +643,38 @@ async function walkTo(page, tx, ty, limit = 300) {
     `hp=${mage.player.maxHp} mp=${mage.player.maxMp} int=${mage.player.attrs.int}`);
   check("mage starts with one small spell", mage.player.skills.length === 1 && mage.player.skills[0].id === "firebolt");
 
+  const facingTest = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    g.create("fighter", "human", "Face");
+    g.travel("greenhills", 1);
+    const map = c.getMap(c.player.mapKey);
+    map.entities.filter(e => e.type === "monster").forEach(m => { m.hp = 0; });
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !c.blocked(c.player.x + dx, c.player.y + dy));
+    const [sdx, sdy] = dirs[0] || [0, 0];
+    c.act({ type: "move", dx: sdx, dy: sdy });
+    const f0 = { ...c.player.facing };
+    for (let i = 0; i < 3; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    const f1 = { ...c.player.facing };
+    for (let i = 0; i < 14; i++) await new Promise(r => requestAnimationFrame(r));
+    const target = Math.atan2(-f1.dx, f1.dy);
+    const err = Math.abs(Math.atan2(Math.sin(target - g.heroAngle()), Math.cos(target - g.heroAngle())));
+    const heroStuck = f1.dx === f0.dx && f1.dy === f0.dy && err < 0.15;
+    c.player.level = 5; c.player.unlockedTiers.greenhills = 2;
+    g.travel("greenhills", 2);
+    const map2 = c.getMap(c.player.mapKey);
+    const m = map2.entities.find(e => e.type === "monster" && e.hp > 0);
+    if (!m) return { ok: false, reason: "no monster", heroStuck };
+    const near = map2.floors.find(f => { const d = Math.max(Math.abs(f.x - m.x), Math.abs(f.y - m.y)); return d >= 2 && d <= 6; });
+    c.player.x = near.x; c.player.y = near.y;
+    const was = { dx: m.x, dy: m.y };
+    c.monsterStep(m);
+    const mf = m.facing;
+    const monsterTurned = !!mf && (mf.dx !== 0 || mf.dy !== 0) &&
+      mf.dx === Math.sign(m.x - was.dx) && mf.dy === Math.sign(m.y - was.dy);
+    return { ok: heroStuck && monsterTurned, heroStuck, monsterTurned, mf };
+  });
+  check("facing sticks after moves/waits, monsters face their step", facingTest.ok, JSON.stringify(facingTest));
+
   check("no page errors during full loop", errors.length === 0, errors.join(" | ").slice(0, 300));
 
   await browser.close();

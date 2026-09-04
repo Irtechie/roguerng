@@ -313,7 +313,7 @@ export class Core {
 
   doMove(dx, dy) {
     const p = this.player;
-    p.facing = { dx, dy };
+    if (dx || dy) p.facing = { dx, dy };
     const nx = p.x + dx, ny = p.y + dy;
     const px = p.x, py = p.y;
     const e = this.entityAt(nx, ny);
@@ -965,7 +965,7 @@ export class Core {
   entities() {
     const map = this.getMap(this.player.mapKey);
     const out = map.entities.filter(e => !(e.type === "monster" && e.hp <= 0)).map(e => {
-      if (e.type === "monster") return { kind: "monster", monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name, facing: e.facing || null };
+      if (e.type === "monster") return { kind: "monster", uid: e.uid, monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name, facing: e.facing || null };
       if (e.type === "item") return { kind: "item", glyph: e.item.glyph, color: e.item.color, icon: e.item.icon, x: e.x, y: e.y, name: itemLabel(e.item) };
       if (e.type === "npc") return { kind: "npc", npcId: e.npcId, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "portal") return { kind: "portal", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
