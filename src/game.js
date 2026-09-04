@@ -945,7 +945,7 @@ function rebuildEntities() {
     bar.visible = e.hp < e.maxHp;
     bar.scale.x = Math.max(0.05, e.hp / e.maxHp);
     if (e.facing) {
-      const target = Math.atan2(-e.facing.dx, e.facing.dy);
+      const target = Math.atan2(-e.facing.dx, -e.facing.dy);
       let d = target - g.rotation.z;
       d = Math.atan2(Math.sin(d), Math.cos(d));
       g.rotation.z += d * 0.3;
@@ -967,7 +967,7 @@ function rebuildEntities() {
     playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color);
     playerSprite.userData.voxel = true;
     const pf0 = core.player.facing || { dx: 1, dy: 0 };
-    playerSprite.rotation.z = Math.atan2(-pf0.dx, pf0.dy);
+    playerSprite.rotation.z = Math.atan2(-pf0.dx, -pf0.dy);
     scene.add(playerSprite);
   }
   const ppx = wx(core.player.x, mapDims.w), ppy = wy(core.player.y, mapDims.h);
@@ -976,7 +976,7 @@ function rebuildEntities() {
   playerSprite.position.set(ppx, ppy, 0);
   playerSprite.userData.setMoving?.(t < (playerSprite.userData.moveUntil || 0));
   const pf = core.player.facing || { dx: 1, dy: 0 };
-  const pTarget = Math.atan2(-pf.dx, pf.dy);
+  const pTarget = Math.atan2(-pf.dx, -pf.dy);
   let pd = pTarget - playerSprite.rotation.z;
   pd = Math.atan2(Math.sin(pd), Math.cos(pd));
   playerSprite.rotation.z += pd * 0.55;
@@ -1376,6 +1376,17 @@ window.game = {
   debugModelFor: id => {
     const g = makeVoxel(id, "", "#888888");
     return { model: g.userData.model || null, animated: !!g.userData.mixer };
+  },
+  heroBones: () => {
+    const root = playerSprite?.userData.modelRoot;
+    if (!root) return null;
+    playerSprite.updateWorldMatrix(true, true);
+    const out = {};
+    for (const n of ["head", "chest", "toes.l", "foot.l", "hips"]) {
+      const b = root.getObjectByName(n);
+      if (b) out[n] = [b.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2))][0];
+    }
+    return out;
   },
   debugSceneModels: () => {
     const names = [];

@@ -704,17 +704,23 @@ async function walkTo(page, tx, ty, limit = 300) {
 
   const facingWorld = await page.evaluate(async () => {
     const g = window.game, c = g.core;
-    const step = !c.blocked(c.player.x + 1, c.player.y) ? [1, 0]
-      : (!c.blocked(c.player.x - 1, c.player.y) ? [-1, 0] : [0, 1]);
-    c.act({ type: "move", dx: step[0], dy: step[1] });
-    for (let i = 0; i < 16; i++) await new Promise(r => requestAnimationFrame(r));
-    const fwd = g.heroForward();
-    if (!fwd) return { ok: false, reason: "no model root (hero not a GLB?)" };
-    const ex = step[0], ey = -step[1];
-    const dot = fwd.x * ex + fwd.y * ey;
-    return { ok: dot > 0.7, step, fwd, dot: +dot.toFixed(2) };
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const results = [];
+    for (const step of dirs) {
+      if (c.blocked(c.player.x + step[0], c.player.y + step[1])) continue;
+      c.act({ type: "move", dx: step[0], dy: step[1] });
+      for (let i = 0; i < 20; i++) await new Promise(r => requestAnimationFrame(r));
+      const fwd = g.heroForward();
+      if (!fwd) return { ok: false, reason: "no model root (hero not a GLB?)" };
+      const ex = step[0], ey = -step[1];
+      const dot = fwd.x * ex + fwd.y * ey;
+      results.push({ step, dot: +dot.toFixed(2) });
+    }
+    const hasX = results.some(r => r.step[1] === 0);
+    const hasY = results.some(r => r.step[0] === 0);
+    return { ok: hasX && hasY && results.every(r => r.dot > 0.7), results };
   });
-  check("GLB hero actually walks facing its movement direction", facingWorld.ok, JSON.stringify(facingWorld));
+  check("GLB hero walks facing its movement direction in all 4 directions", facingWorld.ok, JSON.stringify(facingWorld));
 
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;
