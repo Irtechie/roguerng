@@ -3,6 +3,7 @@
 
 import {
   RACES, CLASSES, SKILLS, SPELLBOOKS, WEAPONS, ARMORS, TRINKETS,
+  SHOP, VENDORS,
   BLESSINGS, CURSES, MONSTERS, BOSSES, MAPS, QUEST_ITEM_NAMES
 } from "./data.js";
 import { generateLayout, generateOutdoor, layoutArchetype, makeRng, hashStr } from "./gen.js";
@@ -10,20 +11,37 @@ import { generateLayout, generateOutdoor, layoutArchetype, makeRng, hashStr } fr
 export const TOWN_KEY = "town";
 export const dungeonKey = (mapId, tier) => mapId + ":d" + tier;
 
-const TOWN_MAP = [
-  "############################",
-  "#..........#...............#",
-  "#...H......#......E........#",
-  "#..........#...............#",
-  "#..............W...........#",
-  "#..........fff.............#",
-  "#..........fff.............#",
-  "#..........................#",
-  "#..........................#",
-  "#.............G.G..........#",
-  "#..........................#",
-  "############################"
-];
+function generateTown() {
+  const W = 34, H = 26;
+  const grid = Array.from({ length: H }, () => Array.from({ length: W }, () => "#"));
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) grid[y][x] = ".";
+  const buildings = [
+    { id: "inn", name: "The Brass Flagon", x0: 3, y0: 3, x1: 8, y1: 7, door: [5, 7], roof: "#8a5a30", wall: "#caa46a" },
+    { id: "shop", name: "Pella's Trade Yard", x0: 11, y0: 2, x1: 16, y1: 6, door: [13, 6], roof: "#a04545", wall: "#c8b088" },
+    { id: "temple", name: "Temple of the Dawn", x0: 24, y0: 3, x1: 30, y1: 7, door: [27, 7], roof: "#c8c2a8", wall: "#ddd6c2" },
+    { id: "smithy", name: "Merrow Smithy", x0: 24, y0: 16, x1: 30, y1: 20, door: [27, 16], roof: "#5a4030", wall: "#96755a" },
+    { id: "gate", name: "Gatehouse", x0: 4, y0: 17, x1: 9, y1: 21, door: [6, 17], roof: "#60687a", wall: "#9aa0ae" }
+  ];
+  for (const b of buildings) {
+    for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) grid[y][x] = "#";
+    grid[b.door[1]][b.door[0]] = ".";
+  }
+  const fountain = { x: 18, y: 11 };
+  grid[fountain.y][fountain.x] = "r";
+  for (const [tx, ty] of [[2, 10], [2, 14], [10, 12], [12, 12], [22, 8], [22, 10], [22, 12], [31, 12], [3, 12], [31, 22], [2, 22], [12, 18], [12, 20], [20, 2], [32, 12], [31, 4], [31, 9], [2, 4], [2, 20], [16, 22]])
+    grid[ty][tx] = "T";
+  for (const [rx, ry] of [[21, 20], [24, 22], [9, 14], [15, 16]])
+    grid[ry][rx] = "r";
+  // market square: open plaza with stalls and crates between the Trade Yard and the fountain
+  const stalls = [
+    { x: 15, y: 9, roof: "#b0603a" },
+    { x: 20, y: 9, roof: "#3a7ab0" },
+    { x: 15, y: 13, roof: "#4a9a5a" }
+  ];
+  for (const s of stalls) grid[s.y][s.x] = "r";
+  for (const [cx, cy] of [[16, 9], [21, 9], [16, 13]]) grid[cy][cx] = "r";
+  return { grid: grid.map(r => r.join("")), buildings, spawn: { x: 18, y: 14 }, fountain, stalls };
+}
 
 let uid = 1;
 const nextUid = () => uid++;
@@ -53,10 +71,10 @@ export class Core {
       name: name || "Hero", classId, raceId, level: 1, xp: 0,
       worldSeed: Math.floor(this.rng() * 1e9),
       attrs, hp: 1, mp: 0, gold: 15, turnsSinceDamage: 99,
-      x: 4, y: 7, mapKey: TOWN_KEY, facing: { dx: 1, dy: 0 },
+      x: 18, y: 14, mapKey: TOWN_KEY, facing: { dx: 1, dy: 0 }, cameFrom: {},
       skills: [cls.skills[0]], cooldowns: {}, buffs: [],
       equipment: { weapon: starterWeapon(classId), armor: starterArmor(classId), trinket: null },
-      bag: [makePotion(), makePotion()],
+      bag: classId === "mage" ? [makePotion(), makeManaPotion()] : [makePotion(), makePotion()],
       quests: {}, questKills: {}, unlockedTiers: {}, unlockedMaps: ["greenhills"]
     };
     for (const mapId of Object.keys(MAPS))
@@ -87,15 +105,20 @@ export class Core {
 
   buildMap(key) {
     if (key === TOWN_KEY) {
-      const grid = TOWN_MAP.slice();
-      const map = { key, kind: "town", name: "Merrow Vale", grid, entities: [], w: grid[0].length, h: grid.length };
-      map.entities.push({ uid: nextUid(), type: "npc", npcId: "innkeep", glyph: "H", color: "#ffd0a0", icon: "delapouite__beer-horn", x: 4, y: 2, name: "Innkeep Toma" });
-      map.entities.push({ uid: nextUid(), type: "npc", npcId: "elder", glyph: "E", color: "#7be07b", icon: "delapouite__dwarf-face", x: 16, y: 2, name: "Elder Marowe" });
-      map.entities.push({ uid: nextUid(), type: "npc", npcId: "warden", glyph: "W", color: "#80c0ff", icon: "delapouite__archer", x: 15, y: 4, name: "Warden Bryn" });
-      map.entities.push({ uid: nextUid(), type: "npc", npcId: "foreman", glyph: "F", color: "#ff9050", icon: "delapouite__miner", x: 20, y: 4, name: "Foreman Halla" });
-      map.entities.push({ uid: nextUid(), type: "portal", target: "greenhills", glyph: "G", color: "#40d040", icon: "lorc__portal", x: 14, y: 9, name: "Greenhills Gate" });
-      map.entities.push({ uid: nextUid(), type: "portal", target: "darkfang", glyph: "G", color: "#a040d0", icon: "lorc__portal", x: 16, y: 9, name: "Darkfang Gate" });
-      map.entities.push({ uid: nextUid(), type: "portal", target: "ashfall", glyph: "A", color: "#ff6030", icon: "lorc__portal", x: 18, y: 9, name: "Ashfall Gate" });
+      const town = generateTown();
+      const grid = town.grid.slice();
+      const map = { key, kind: "town", name: "Merrow Vale", grid, entities: [], stairs: null,
+        spawn: town.spawn, buildings: town.buildings, fountain: town.fountain, stalls: town.stalls, w: grid[0].length, h: grid.length };
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "innkeep", glyph: "H", color: "#ffd0a0", icon: "delapouite__beer-horn", x: 5, y: 8, name: "Innkeep Toma" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "merchant", glyph: "$", color: "#ffd76a", icon: "delapouite__jewel-crown", x: 13, y: 8, name: "Pella the Trader" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "elder", glyph: "E", color: "#7be07b", icon: "delapouite__dwarf-face", x: 21, y: 10, name: "Elder Marowe" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "warden", glyph: "W", color: "#80c0ff", icon: "delapouite__archer", x: 6, y: 16, name: "Warden Bryn" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "foreman", glyph: "F", color: "#ff9050", icon: "delapouite__miner", x: 25, y: 15, name: "Foreman Halla" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "smith", glyph: "A", color: "#ff8060", icon: "delapouite__warhammer", x: 28, y: 15, name: "Dorin Anvil" });
+      map.entities.push({ uid: nextUid(), type: "npc", npcId: "sage", glyph: "S", color: "#c0a0ff", icon: "delapouite__spell-book", x: 27, y: 8, name: "Sage Ianna" });
+      map.entities.push({ uid: nextUid(), type: "portal", target: "greenhills", glyph: "G", color: "#40d040", icon: "lorc__portal", x: 14, y: 23, name: "Greenhills Gate" });
+      map.entities.push({ uid: nextUid(), type: "portal", target: "darkfang", glyph: "G", color: "#a040d0", icon: "lorc__portal", x: 17, y: 23, name: "Darkfang Gate" });
+      map.entities.push({ uid: nextUid(), type: "portal", target: "ashfall", glyph: "A", color: "#ff6030", icon: "lorc__portal", x: 20, y: 23, name: "Ashfall Gate" });
       return map;
     }
     if (MAPS[key]) {
@@ -129,9 +152,15 @@ export class Core {
       if (d > bestD) { bestD = d; stairs = f; }
     }
     map.stairs = stairs;
-    map.entities.push({ uid: nextUid(), type: "portal", target: mapId, glyph: "X", color: "#ffd24d", icon: "delapouite__exit-door", x: map.spawn.x, y: map.spawn.y, name: "Return to " + def.name });
+    let portalCell = map.spawn;
+    const openCell = (x, y) => x >= 0 && y >= 0 && x < map.w && y < map.h && grid[y][x] === ".";
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const c = { x: map.spawn.x + ox, y: map.spawn.y + oy };
+      if (openCell(c.x, c.y)) { portalCell = c; break; }
+    }
+    map.entities.push({ uid: nextUid(), type: "portal", target: mapId, glyph: "X", color: "#ffd24d", icon: "delapouite__exit-door", x: portalCell.x, y: portalCell.y, name: "Return to " + def.name });
 
-    const occupied = new Set([map.spawn.x + "," + map.spawn.y]);
+    const occupied = new Set([map.spawn.x + "," + map.spawn.y, map.stairs.x + "," + map.stairs.y, portalCell.x + "," + portalCell.y]);
     const freeCell = () => {
       for (let t = 0; t < 50; t++) {
         const f = floors[Math.floor(rng() * floors.length)];
@@ -165,6 +194,33 @@ export class Core {
       const cell = freeCell();
       if (cell) map.entities.push({ uid: nextUid(), type: "item", item: genItem(mapId, tier, rng), x: cell.x, y: cell.y });
     }
+    // Chests hold gold and gear; locked ones bite unless you carry an iron key.
+    const chestCount = 1 + (rng() < 0.55 ? 1 : 0);
+    for (let i = 0; i < chestCount; i++) {
+      const cell = freeCell();
+      if (!cell) continue;
+      const loot = [];
+      const lootCount = 1 + (rng() < 0.4 ? 1 : 0);
+      for (let j = 0; j < lootCount; j++) loot.push(genItem(mapId, tier, rng));
+      const locked = rng() < 0.35;
+      map.entities.push({
+        uid: nextUid(), type: "chest", x: cell.x, y: cell.y,
+        glyph: "C", color: locked ? "#d06030" : "#d0a040",
+        locked,
+        gold: 8 + tier * (6 + Math.floor(rng() * 10)),
+        hasKey: rng() < 0.35, loot
+      });
+    }
+    // One locked strongroom per depth: an iron key turns its stash to loot.
+    const doorCell = freeCell();
+    if (doorCell) map.entities.push({
+      uid: nextUid(), type: "door", x: doorCell.x, y: doorCell.y, locked: true,
+      glyph: "‡", color: "#b06030",
+      stash: {
+        gold: 20 + tier * 18 + Math.floor(rng() * 20),
+        items: [genItem(mapId, Math.min(12, tier + 2), rng), genItem(mapId, Math.min(12, tier + 2), rng)]
+      }
+    });
     return map;
   }
 
@@ -229,6 +285,10 @@ export class Core {
       case "skill": tookTurn = this.doSkill(action.slot); break;
       case "interact": tookTurn = this.doInteract(); break;
       case "descend": this.doDescend(); break;
+      case "ascend": this.doAscend(); break;
+      case "identify": this.doIdentify(action.uid); break;
+      case "buy": this.doBuy(action.key); break;
+      case "sell": this.doSell(action.uid); break;
       case "equip": this.doEquip(action.uid); break;
       case "drop": this.doDrop(action.uid); break;
       case "useItem": this.doUseItem(action.uid); break;
@@ -239,8 +299,8 @@ export class Core {
     return tookTurn;
   }
 
-  blocked(x, y) {
-    const map = this.getMap(this.player.mapKey);
+  blocked(x, y, mapKey) {
+    const map = this.getMap(mapKey || this.player.mapKey);
     if (x < 0 || y < 0 || x >= map.w || y >= map.h) return true;
     const ch = map.grid[y][x];
     return ch === "#" || ch === " " || ch === "T" || ch === "r";
@@ -259,12 +319,14 @@ export class Core {
     const e = this.entityAt(nx, ny);
     if (e && e.type === "monster") return this.playerAttack(e, 1.0) || true;
     if (e && (e.type === "npc" || (e.type === "monster" && e.hp > 0))) return false;
+    if (e && e.type === "chest") return this.openChest(e);
+    if (e && e.type === "door") return this.unlockDoor(e);
     if (this.blocked(nx, ny)) return false;
     p.x = nx; p.y = ny;
     const here = this.entityAt(nx, ny);
     if (here) {
       if (here.type === "item") this.pickup(here);
-      else if (here.type === "portal") {
+      else if (here.type === "portal" && (dx !== 0 || dy !== 0)) {
         if (here.target === "town") this.doTravel("town");
         else this.doTravel(here.target);
         return true;
@@ -296,6 +358,53 @@ export class Core {
     if (this.player.bag.length >= 20) { this.say("Your pack is full."); return; }
     this.player.bag.push(it);
     this.say(`Picked up ${itemLabel(it)}.`, it.color);
+  }
+
+  takeKey() {
+    const key = this.player.bag.find(i => i.kind === "key");
+    if (key) this.player.bag.splice(this.player.bag.indexOf(key), 1);
+    return key || null;
+  }
+
+  spillToFloor(map, x, y, items) {
+    for (const it of items) {
+      if (this.player.bag.length < 20) this.player.bag.push(it);
+      else map.entities.push({ uid: nextUid(), type: "item", x, y, item: it });
+    }
+  }
+
+  openChest(chest) {
+    const p = this.player, map = this.getMap();
+    if (chest.locked) {
+      if (!p.bag.some(i => i.kind === "key")) { this.say("A padlock, green with rust. You need an iron key.", "#c0a0a0"); return false; }
+      this.takeKey();
+      chest.locked = false;
+      this.say("The iron key turns with a stubborn grind. (-1 Iron Key)", "#c0c0d0");
+    }
+    map.entities = map.entities.filter(x => x !== chest);
+    p.gold += chest.gold;
+    this.say(`The chest yields ${chest.gold} gold.`, "#ffd76a");
+    this.spillToFloor(map, chest.x, chest.y, chest.loot);
+    for (const it of chest.loot) this.say(`...and ${itemLabel(it)}.`, it.color);
+    if (chest.hasKey) {
+      const k = makeKey();
+      this.spillToFloor(map, chest.x, chest.y, [k]);
+      this.say("...and an iron key on a frayed cord.", "#c0c0d0");
+    }
+    return true;
+  }
+
+  unlockDoor(door) {
+    const p = this.player, map = this.getMap();
+    if (!door.locked) { map.entities = map.entities.filter(x => x !== door); return false; }
+    if (!p.bag.some(i => i.kind === "key")) { this.say("A locked strongroom door. An iron key would open it.", "#c0a0a0"); return false; }
+    this.takeKey();
+    map.entities = map.entities.filter(x => x !== door);
+    p.gold += door.stash.gold;
+    this.say(`The strongroom door swings wide: ${door.stash.gold} gold in a coin chest! (-1 Iron Key)`, "#ffd76a");
+    this.spillToFloor(map, door.x, door.y, door.stash.items);
+    for (const it of door.stash.items) this.say(`...and ${itemLabel(it)} on a dust-covered rack.`, it.color);
+    return true;
   }
 
   playerAttack(monster, mult, flat = 0) {
@@ -372,9 +481,23 @@ export class Core {
     p.mp -= s.cost;
     p.cooldowns[id] = s.cd + 1;
     switch (s.kind) {
+      case "identify": {
+        const target = p.bag.find(i => ["weapon", "armor", "trinket"].includes(i.kind) && i.ident === false);
+        if (!target) { p.mp += s.cost; p.cooldowns[id] = 0; this.say("Nothing in your pack needs identifying."); return false; }
+        target.ident = true;
+        this.say(`You identify the ${itemLabel(target)}.`, "#7ddfff");
+        break;
+      }
+      case "plunder": {
+        if (!near.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No one close enough to pick a pocket.", "#ff9090"); return false; }
+        const loot = 15 + p.level * 3 + Math.floor(this.rng() * 20);
+        p.gold += loot;
+        this.say(`Plunder: ${loot}g lighter-fingered from the ${near[0].name}.`, "#ffd76a");
+        break;
+      }
       case "melee":
         if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foe in reach.", "#ff9090"); return false; }
-        this.playerAttack(adj[0], 1.8);
+        this.playerAttack(adj[0], s.power || 1.8);
         break;
       case "melee-all":
         if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foes in reach.", "#ff9090"); return false; }
@@ -393,7 +516,7 @@ export class Core {
       case "bolt": {
         const t = near[0];
         if (!t) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No target in range.", "#ff9090"); return false; }
-        const dmg = s.power + (s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
+        const dmg = s.power + (s.dex ? e.dex : s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
         t.hp -= dmg;
         this.say(`${s.name} sears ${t.name} for ${dmg}!`, "#ffb060");
         if (s.stun && t.hp > 0) t.stun = s.stun;
@@ -404,9 +527,9 @@ export class Core {
         const targets = near.slice(0, s.count);
         if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No targets in range.", "#ff9090"); return false; }
         for (const t of targets) {
-          const dmg = s.power + e.int + this.rng() * 3 | 0;
+          const dmg = s.power + (s.dex ? e.dex : e.int) + this.rng() * 3 | 0;
           t.hp -= dmg;
-          this.say(`${s.name} arcs through ${t.name} for ${dmg}!`, "#c0a0ff");
+          this.say(`${s.name} arcs through ${t.name} for ${dmg}!`, s.dex ? "#a0e0a0" : "#c0a0ff");
           if (t.hp <= 0) this.killMonster(t);
         }
         break;
@@ -423,6 +546,8 @@ export class Core {
     for (const [x, y] of spots) {
       const e = this.entityAt(x, y);
       if (e && e.type === "npc") return this.talkTo(e);
+      if (e && e.type === "chest") return this.openChest(e);
+      if (e && e.type === "door") return this.unlockDoor(e);
       if (e && e.type === "portal") {
         if (e.target === "town") this.doTravel("town");
         else this.doTravel(e.target, 1);
@@ -437,7 +562,20 @@ export class Core {
     const p = this.player;
     if (npc.npcId === "innkeep") {
       p.hp = this.eff().maxHp; p.mp = this.eff().maxMp;
+      p.turnsSinceDamage = 0;
       this.say("Innkeep Toma: 'Rest a while.' You are fully rested.", "#90ff90");
+      return true;
+    }
+    if (npc.npcId === "merchant") {
+      this.say("Pella the Trader: 'Bought from Pella, sold to Pella - the goods pass honest(ish). Potions, keys, scrolls, and light blades in my ledger panel.'", "#ffd76a");
+      return true;
+    }
+    if (npc.npcId === "smith") {
+      this.say("Dorin Anvil: 'Steel shaped honest and paid in full. Blades and armor bought from Dorin keep their edges - and Dorin buys good gear back.'", "#ff8060");
+      return true;
+    }
+    if (npc.npcId === "sage") {
+      this.say("Sage Ianna: 'Every spell I sell was written by a wiser head than yours. Any class with the patience to read may learn from a book.'", "#c0a0ff");
       return true;
     }
     const mapId = Object.keys(MAPS).find(mid => MAPS[mid].quest.npc === npc.npcId);
@@ -460,10 +598,17 @@ export class Core {
 
   doTravel(target, tier) {
     const p = this.player;
+    const oldKey = p.mapKey;
+    p.cameFrom = p.cameFrom || {};
+    const rec = { mapKey: oldKey, x: p.pendingReturn ? p.pendingReturn.x : p.x, y: p.pendingReturn ? p.pendingReturn.y : p.y };
+    p.pendingReturn = null;
     if (target === "town") {
+      p.cameFrom[TOWN_KEY] = rec;
       p.mapKey = TOWN_KEY;
       const town = this.getMap(TOWN_KEY);
-      p.x = 15; p.y = 7;
+      const back = p.cameFrom[oldKey];
+      if (back && back.mapKey === TOWN_KEY && !this.blocked(back.x, back.y, TOWN_KEY)) { p.x = back.x; p.y = back.y; }
+      else { p.x = town.spawn.x; p.y = town.spawn.y; }
       this.say("You return to Merrow Vale.");
       return;
     }
@@ -471,26 +616,42 @@ export class Core {
     if (!def) return;
     if (p.level < def.unlockLevel) { this.say(`${def.name} is sealed to you until level ${def.unlockLevel}.`, "#ff9090"); return; }
     if (!tier) {
+      p.cameFrom[target] = rec;
       p.mapKey = target;
       const out = this.getMap(target);
-      const rp = p.outdoorReturn && p.outdoorReturn[target];
-      if (rp && !this.blocked(rp.x, rp.y)) { p.x = rp.x; p.y = rp.y; }
+      const back = p.cameFrom[oldKey];
+      if (back && back.mapKey === target && !this.blocked(back.x, back.y, target)) { p.x = back.x; p.y = back.y; }
       else { p.x = out.spawn.x; p.y = out.spawn.y; }
       this.say(`You step out into the ${def.name} outdoors. Find the entrance to delve deeper.`);
       return;
     }
     const maxUnlocked = p.unlockedTiers[target] || 1;
     const t = Math.min(tier, maxUnlocked);
-    const cur = this.getMap(p.mapKey);
-    if (cur.kind === "outdoor") {
-      p.outdoorReturn = p.outdoorReturn || {};
-      p.outdoorReturn[target] = p.pendingReturn || { x: p.x, y: p.y };
-      p.pendingReturn = null;
-    }
-    p.mapKey = dungeonKey(target, t);
+    const destKey = dungeonKey(target, t);
+    p.cameFrom[destKey] = rec;
+    p.mapKey = destKey;
     const map = this.getMap(p.mapKey);
     p.x = map.spawn.x; p.y = map.spawn.y;
     this.say(`You enter ${def.name}, dungeon level ${t} (${map.tier === def.tiers ? "final depth" : "layout " + (map.arch + 1)}).`);
+  }
+
+  doAscend() {
+    const p = this.player;
+    const rec = (p.cameFrom || {})[p.mapKey];
+    if (!rec) { this.say("There is no way back up from here."); return; }
+    let x = rec.x, y = rec.y;
+    if (this.blocked(x, y, rec.mapKey)) {
+      let found = null;
+      for (let r = 1; r <= 3 && !found; r++)
+        for (let dx = -r; dx <= r && !found; dx++)
+          for (let dy = -r; dy <= r && !found; dy++)
+            if (!this.blocked(rec.x + dx, rec.y + dy, rec.mapKey)) found = { x: rec.x + dx, y: rec.y + dy };
+      if (!found) { this.say("The way back is sealed."); return; }
+      x = found.x; y = found.y;
+    }
+    p.mapKey = rec.mapKey;
+    p.x = x; p.y = y;
+    this.say("You climb back the way you came.", "#b0d0ff");
   }
 
   doDescend() {
@@ -503,7 +664,10 @@ export class Core {
     if (!onStairs) { this.say("You must stand on or beside the stairs (>)."); return; }
     if (tier >= def.tiers) { this.say("You have conquered every depth of this place.", "#ffd700"); return; }
     p.unlockedTiers[mapId] = Math.max(p.unlockedTiers[mapId] || 1, tier + 1);
-    p.mapKey = dungeonKey(mapId, tier + 1);
+    const nextKey = dungeonKey(mapId, tier + 1);
+    p.cameFrom = p.cameFrom || {};
+    p.cameFrom[nextKey] = { mapKey: p.mapKey, x: map.stairs.x, y: map.stairs.y };
+    p.mapKey = nextKey;
     const next = this.getMap(p.mapKey);
     p.x = next.spawn.x; p.y = next.spawn.y;
     this.say(`You descend to ${def.name} depth ${tier + 1}. The air grows heavier.`, "#c0a0ff");
@@ -526,6 +690,10 @@ export class Core {
     if (idx < 0) return;
     const it = p.bag[idx];
     if (!["weapon", "armor", "trinket"].includes(it.kind)) { this.say("That is not equipment."); return; }
+    if (it.ident === false) { this.say(`You dare not use ${it.name} unidentified - who knows what it truly is, or what curses it.`, "#c0a0a0"); return; }
+    const cls = CLASSES[p.classId];
+    if (it.kind === "weapon" && cls.weapons && !cls.weapons.includes(it.id)) { this.say(`A ${cls.name} cannot wield a ${it.name}.`, "#ff9090"); return; }
+    if (it.kind === "armor" && cls.armors && !cls.armors.includes(it.id)) { this.say(`A ${cls.name} cannot wear ${it.name}.`, "#ff9090"); return; }
     p.bag.splice(idx, 1);
     const old = p.equipment[it.slot];
     p.equipment[it.slot] = it;
@@ -535,6 +703,96 @@ export class Core {
     p.hp = Math.min(p.hp, e.maxHp); p.mp = Math.min(p.mp, e.maxMp);
   }
 
+  doIdentify(uid) {
+    const p = this.player;
+    const it = p.bag.find(i => i.uid === uid);
+    if (!it) { this.say("Identify what?"); return false; }
+    if (!["weapon", "armor", "trinket"].includes(it.kind) || it.ident !== false) { this.say("That item is already known to you."); return false; }
+    const s = SKILLS["identify"];
+    const hasScroll = p.bag.find(i => i.kind === "scroll-identify");
+    const knows = p.skills.includes("identify");
+    if (knows && p.mp >= s.cost) {
+      p.mp -= s.cost;
+    } else if (hasScroll) {
+      p.bag.splice(p.bag.indexOf(hasScroll), 1);
+    } else if (knows) {
+      this.say("Not enough mana to Identify.", "#ff9090"); return false;
+    } else {
+      this.say("You have no magic for this. Buy a Scroll of Identify from Pella, or play a Mage.", "#c0a0a0"); return false;
+    }
+    it.ident = true;
+    this.say(`You identify the ${itemLabel(it)}.`, "#7ddfff");
+    return true;
+  }
+
+  nearbyVendor() {
+    const p = this.player;
+    if (!p) return null;
+    const map = this.getMap(p.mapKey);
+    if (map.kind !== "town") return null;
+    const npc = map.entities.find(e => e.type === "npc" && VENDORS[e.npcId] && dist(e, p) <= 2);
+    return npc || null;
+  }
+
+  doBuy(key) {
+    const p = this.player;
+    const entry = SHOP.find(s => s.key === key);
+    if (!entry) return false;
+    const vendor = this.nearbyVendor();
+    if (!vendor || vendor.npcId !== entry.vendor) {
+      const who = VENDORS[entry.vendor].name;
+      this.say(`Only ${who} sells the ${entry.name}.`); return false;
+    }
+    if (p.gold < entry.price) { this.say(`${vendor.name}: 'No gold, no goods.' (${entry.price}g)`); return false; }
+    if (p.bag.length >= 20) { this.say("Your pack is full."); return false; }
+    const [type, id] = key.split(":");
+    let item;
+    if (key === "potion") item = makePotion();
+    else if (key === "potion-mana") item = makeManaPotion();
+    else if (key === "scroll-identify") item = makeScrollIdentify();
+    else if (key === "key") item = makeKey();
+    else if (type === "weapon") {
+      const w = WEAPONS.find(x => x.id === id);
+      item = { uid: nextUid(), kind: "weapon", slot: "weapon", id: w.id, name: w.name, dmg: w.dmg, glyph: "/", color: "#d0d0e0", icon: w.icon, affixes: [], cursed: false, ident: true };
+    } else if (type === "armor") {
+      const a = ARMORS.find(x => x.id === id);
+      item = { uid: nextUid(), kind: "armor", slot: "armor", id: a.id, name: a.name, def: a.def, glyph: "[", color: "#c0a070", icon: a.icon, affixes: [], cursed: false, ident: true };
+    } else if (type === "book") {
+      const b = SPELLBOOKS[id];
+      item = { uid: nextUid(), kind: "book", bookId: id, name: b.name, glyph: b.glyph, color: b.color, icon: b.icon, reqLevel: b.reqLevel, ident: true };
+    }
+    p.gold -= entry.price;
+    p.bag.push(item);
+    this.say(`${vendor.name}: the ${entry.name} is yours. -${entry.price}g.`, "#ffd76a");
+    return true;
+  }
+
+  doSell(uid) {
+    const p = this.player;
+    const idx = p.bag.findIndex(i => i.uid === uid);
+    if (idx < 0) return false;
+    const vendor = this.nearbyVendor();
+    if (!vendor) {
+      this.say("No merchant is close enough to trade - find Pella, Dorin, or Ianna in town."); return false;
+    }
+    const it = p.bag[idx];
+    if (it.quest) { this.say("That belongs to a village, not a coin purse."); return false; }
+    let price = 4;
+    if (it.kind === "potion") price = it.effect === "mana" ? 10 : 8;
+    else if (it.kind === "key") price = 12;
+    else if (it.kind === "scroll-identify") price = 15;
+    else if (it.kind === "book") price = 40;
+    else if (["weapon", "armor", "trinket"].includes(it.kind)) {
+      price = 10 + (it.dmg || it.def || 0) * 8 + it.affixes.filter(a => a.value > 0).length * 6;
+      if (it.ident === false) price = Math.round(price * 0.35);
+      else if (it.cursed) price = Math.round(price * 0.5);
+    }
+    p.bag.splice(idx, 1);
+    p.gold += price;
+    this.say(`${vendor.name} counts out ${price} gold for the ${itemLabel(it)}.`, "#ffd76a");
+    return true;
+  }
+
   doUseItem(itemUid) {
     const p = this.player;
     const idx = p.bag.findIndex(i => i.uid === itemUid);
@@ -542,10 +800,28 @@ export class Core {
     const it = p.bag[idx];
     if (it.kind === "potion") {
       const e = this.eff();
-      const amount = Math.round(e.maxHp * 0.4);
-      p.hp = Math.min(e.maxHp, p.hp + amount);
+      if (it.effect === "mana") {
+        const amount = Math.round(e.maxMp * 0.5);
+        p.mp = Math.min(e.maxMp, p.mp + amount);
+        p.bag.splice(idx, 1);
+        this.say(`You drink the blue potion: +${amount} MP.`, "#80a0ff");
+      } else {
+        const amount = Math.round(e.maxHp * 0.4);
+        p.hp = Math.min(e.maxHp, p.hp + amount);
+        p.bag.splice(idx, 1);
+        this.say(`You drink the red potion: +${amount} HP.`, "#ff8080");
+      }
+    } else if (it.kind === "key") {
+      this.say("Iron keys open locked chests and strongroom doors - just walk into them.", "#c0c0d0");
+    } else if (it.kind === "scroll-identify") {
+      const target = p.bag.find(i => ["weapon", "armor", "trinket"].includes(i.kind) && i.ident === false && i.uid !== itemUid);
       p.bag.splice(idx, 1);
-      this.say(`You drink the red potion: +${amount} HP.`, "#ff8080");
+      if (target) {
+        target.ident = true;
+        this.say(`The scroll whispers its name: ${itemLabel(target)}.`, "#7ddfff");
+      } else {
+        this.say("The scroll crumbles to dust... over an empty pack.", "#c0a0a0");
+      }
     } else if (it.kind === "book") {
       const sb = SPELLBOOKS[it.bookId];
       if (p.skills.includes(sb.teaches)) { this.say("You already know that spell."); return; }
@@ -588,16 +864,18 @@ export class Core {
       if (!sx && !sy) continue;
       const nx = m.x + sx, ny = m.y + sy;
       if (this.blocked(nx, ny)) continue;
-      if (nx === p.x && ny === p.y) { this.monsterAttack(m); return; }
+      if (nx === p.x && ny === p.y) { m.facing = { dx: sx, dy: sy }; this.monsterAttack(m); return; }
       const occ = this.entityAt(nx, ny);
       if (occ && occ !== m && occ.type !== "item") continue;
       m.x = nx; m.y = ny;
+      m.facing = { dx: sx, dy: sy };
       return;
     }
   }
 
   monsterAttack(m) {
     const p = this.player, e = this.eff();
+    m.facing = { dx: Math.sign(p.x - m.x), dy: Math.sign(p.y - m.y) };
     const dmg = Math.max(1, rand1to(this.rng, m.dmg) - rand0to(this.rng, Math.max(0, e.def)));
     p.hp -= dmg;
     p.turnsSinceDamage = 0;
@@ -616,7 +894,8 @@ export class Core {
     this.dead = false;
     p.xp = Math.max(0, Math.round(p.xp * 0.9));
     p.mapKey = TOWN_KEY;
-    p.x = 4; p.y = 7;
+    const home = this.getMap(TOWN_KEY).spawn;
+    p.x = home.x; p.y = home.y;
     this.getMap(TOWN_KEY);
     p.hp = Math.round(this.eff().maxHp * 0.5);
     p.mp = Math.round(this.eff().maxMp * 0.5);
@@ -686,11 +965,13 @@ export class Core {
   entities() {
     const map = this.getMap(this.player.mapKey);
     const out = map.entities.filter(e => !(e.type === "monster" && e.hp <= 0)).map(e => {
-      if (e.type === "monster") return { kind: "monster", monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name };
+      if (e.type === "monster") return { kind: "monster", monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name, facing: e.facing || null };
       if (e.type === "item") return { kind: "item", glyph: e.item.glyph, color: e.item.color, icon: e.item.icon, x: e.x, y: e.y, name: itemLabel(e.item) };
-      if (e.type === "npc") return { kind: "npc", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
+      if (e.type === "npc") return { kind: "npc", npcId: e.npcId, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "portal") return { kind: "portal", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "entrance") return { kind: "entrance", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
+      if (e.type === "chest") return { kind: "chest", glyph: e.glyph, color: e.color, icon: null, x: e.x, y: e.y, locked: !!e.locked, name: e.locked ? "Locked chest" : "Chest" };
+      if (e.type === "door") return { kind: "door", glyph: e.glyph, color: e.color, icon: "delapouite__door", x: e.x, y: e.y, locked: !!e.locked, name: e.locked ? "Locked strongroom door" : "Open doorway" };
       return null;
     }).filter(Boolean);
     if (map.stairs) out.push({ kind: "stairs", glyph: ">", color: "#ffd76a", icon: "delapouite__3d-stairs", x: map.stairs.x, y: map.stairs.y, name: "Stairs down" });
@@ -713,7 +994,7 @@ export class Core {
         if (prev.has(k) || this.blocked(nx, ny)) continue;
         if (!(nx === tx && ny === ty)) {
           const occ = this.entityAt(nx, ny);
-          if (occ && (occ.type === "npc" || occ.type === "portal")) continue;
+          if (occ && (occ.type === "npc" || occ.type === "portal" || occ.type === "chest" || occ.type === "door")) continue;
         }
         prev.set(k, cx + "," + cy);
         queue.push([nx, ny]);
@@ -740,7 +1021,7 @@ export class Core {
 
   monstersNear() {
     const map = this.getMap(this.player.mapKey);
-    return map.entities.filter(e => e.type === "monster" && e.hp > 0).map(m => ({ id: m.uid, name: m.name, x: m.x, y: m.y, hp: m.hp }));
+    return map.entities.filter(e => e.type === "monster" && e.hp > 0).map(m => ({ id: m.uid, name: m.name, x: m.x, y: m.y, hp: m.hp, facing: m.facing || null }));
   }
 
   itemsOnMap() {
@@ -780,7 +1061,16 @@ function starterArmor(classId) {
   return { uid: nextUid(), kind: "armor", slot: "armor", glyph: "[", color: "#c0a070", affixes: [], cursed: false, ...base };
 }
 function makePotion() {
-  return { uid: nextUid(), kind: "potion", name: "Red Potion", glyph: "!", color: "#ff6060", icon: "delapouite__health-potion" };
+  return { uid: nextUid(), kind: "potion", name: "Red Potion", glyph: "!", color: "#ff6060", icon: "delapouite__health-potion", ident: true };
+}
+function makeScrollIdentify() {
+  return { uid: nextUid(), kind: "scroll-identify", name: "Scroll of Identify", glyph: "?", color: "#e0e0ff", icon: "delapouite__spell-book", ident: true };
+}
+function makeManaPotion() {
+  return { uid: nextUid(), kind: "potion", effect: "mana", name: "Blue Potion", glyph: "!", color: "#7090ff", icon: "delapouite__magic-potion", ident: true };
+}
+function makeKey() {
+  return { uid: nextUid(), kind: "key", name: "Iron Key", glyph: "k", color: "#c0c0d0", icon: null, ident: true };
 }
 
 export function genItem(mapId, tier, rng, forceBlessed = false) {
@@ -794,7 +1084,8 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
       return { uid: nextUid(), kind: "book", bookId, name: b.name, glyph: b.glyph, color: b.color, icon: b.icon, reqLevel: b.reqLevel };
     }
   }
-  if (roll < 0.35 && !forceBlessed) return makePotion();
+  if (roll < 0.24 && !forceBlessed) return makeScrollIdentify();
+  if (roll < 0.38 && !forceBlessed) return rng() < 0.6 ? makePotion() : makeManaPotion();
 
   const slotRoll = rng();
   let kind, base;
@@ -809,8 +1100,9 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
 
   const glyphs = { weapon: "/", armor: "[", trinket: "'" }, colors = { weapon: "#d0d0e0", armor: "#c0a070", trinket: "#e0c060" };
   const item = {
-    uid: nextUid(), kind, slot: kind, name: base.name, dmg: base.dmg, def: base.def,
-    glyph: glyphs[kind], color: colors[kind], icon: base.icon || null, affixes: [], cursed: false
+    uid: nextUid(), kind, slot: kind, id: base.id, name: base.name, dmg: base.dmg, def: base.def,
+    glyph: glyphs[kind], color: colors[kind], icon: base.icon || null, affixes: [], cursed: false,
+    ident: forceBlessed || rng() < 0.15
   };
   const cursed = !forceBlessed && rng() < 0.2;
   if (cursed) {
@@ -835,6 +1127,7 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
 
 export function itemLabel(it) {
   if (!it) return "";
+  if (it.ident === false) return `Unidentified ${it.name}?`;
   if (!it.affixes || !it.affixes.length) return it.name;
   const parts = it.affixes.map(a => `${a.value > 0 ? "+" : ""}${a.value} ${a.name}`);
   return `${it.name} (${parts.join(", ")})`;
@@ -842,7 +1135,7 @@ export function itemLabel(it) {
 
 function labelOrNull(it) { return it ? itemLabel(it) : null; }
 function describeItem(it) {
-  return { uid: it.uid, label: itemLabel(it), kind: it.kind, color: it.color, glyph: it.glyph, icon: it.icon || null, reqLevel: it.reqLevel || null };
+  return { uid: it.uid, label: itemLabel(it), kind: it.kind, color: it.color, glyph: it.glyph, icon: it.icon || null, reqLevel: it.reqLevel || null, ident: it.ident !== false };
 }
 
 function rand1to(rng, n) { return 1 + Math.floor(rng() * Math.max(1, n)); }

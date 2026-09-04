@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "../vendor/GLTFLoader.js";
 import { GLTFExporter } from "../vendor/GLTFExporter.js";
 import { Core } from "./core.js";
-import { RACES, CLASSES } from "./data.js";
+import { RACES, CLASSES, SHOP, VENDORS } from "./data.js";
 
 const urlSeed = new URLSearchParams(location.search).get("seed");
 const core = new Core(urlSeed ? Number(urlSeed) : (Date.now() & 0xffffff));
@@ -145,6 +145,7 @@ let loadedKey = null;
 let floorMesh, wallMesh, floorIndex, wallIndex, mapDims;
 let propMeshes = [];
 let floorAO = null;
+let flames = [];
 const explored = new Map();
 let visibleSet = new Set();
 
@@ -153,6 +154,7 @@ function wy(y, h) { return -(y - h / 2); }
 
 function buildMapMeshes(map) {
   if (mapGroup) scene.remove(mapGroup);
+  flames = [];
   mapGroup = new THREE.Group();
   scene.add(mapGroup);
   mapDims = { w: map.w, h: map.h };
@@ -165,16 +167,22 @@ function buildMapMeshes(map) {
     else if (ch === "r") { rocks.push({ x, y }); floors.push({ x, y }); }
     else if (ch === ".") floors.push({ x, y });
   }
-  const outdoor = map.kind === "outdoor";
+  const skipProp = new Set((map.stalls || []).map(s => s.x + "," + s.y));
+  if (map.fountain) skipProp.add(map.fountain.x + "," + map.fountain.y);
+  const rockCells = rocks.filter(r => !skipProp.has(r.x + "," + r.y));
+  const outdoor = map.kind === "outdoor" || map.kind === "town";
   sky.visible = outdoor;
   scene.fog.color.set(outdoor ? 0x7d9cc0 : 0x05060c);
   scene.background.set(outdoor ? 0x8fb0d8 : 0x05060c);
-  moon.intensity = outdoor ? 1.6 : 0.5;
+  moon.intensity = outdoor ? 1.7 : 0.5;
   floorIndex = new Map(); wallIndex = new Map();
   floors.forEach((f, i) => floorIndex.set(f.x + "," + f.y, i));
   walls.forEach((f, i) => wallIndex.set(f.x + "," + f.y, i));
 
   const theme = map.kind === "town" ? "town" : map.mapId;
+  floorLit.set(map.kind === "town" ? 0x46603c : map.kind === "outdoor"
+    ? (map.mapId === "ashfall" ? 0x4c4232 : map.mapId === "darkfang" ? 0x2e4436 : 0x38522e)
+    : 0x2c4436);
   floorAO = new Float32Array(floors.length).fill(1);
   const isWall = (x, y) => {
     const k = x + "," + y;
@@ -222,8 +230,152 @@ function buildMapMeshes(map) {
     propMeshes.push(inst);
   };
   mkProp(trees, new THREE.BoxGeometry(0.22, 0.22, 0.7), new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 1 }), 0.4);
-  mkProp(trees, new THREE.BoxGeometry(0.75, 0.75, 0.75), new THREE.MeshStandardMaterial({ color: 0x2e6b34, roughness: 1 }), 1.05);
-  mkProp(rocks, new THREE.BoxGeometry(0.55, 0.55, 0.4), new THREE.MeshStandardMaterial({ color: 0x6e6e76, roughness: 1 }), 0.25);
+  mkProp(trees, new THREE.SphereGeometry(0.45, 8, 6), new THREE.MeshStandardMaterial({ color: 0x2e6b34, roughness: 0.9 }), 1.1);
+  mkProp(rockCells, new THREE.SphereGeometry(0.32, 6, 5), new THREE.MeshStandardMaterial({ color: 0x6e6e76, roughness: 1 }), 0.2);
+
+  const scatter = (n, geo, mat, z, seedTag) => {
+    const cells = [];
+    if (!floors.length) return;
+    for (let i = 0; i < n; i++) cells.push(floors[Math.floor(Math.random() * floors.length)]);
+    mkProp(cells, geo, mat, z);
+  };
+  if (outdoor) {
+    const green = map.mapId === "darkfang" ? 0x3a5a48 : map.mapId === "ashfall" ? 0x6a5a4a : 0x4a8a3e;
+    scatter(110, new THREE.ConeGeometry(0.07, 0.26, 4), new THREE.MeshStandardMaterial({ color: green, roughness: 1 }), 0.16);
+    scatter(40, new THREE.SphereGeometry(0.07, 5, 4), new THREE.MeshStandardMaterial({ color: 0x77777f, roughness: 1 }), 0.07);
+    if (map.kind === "town")
+      scatter(26, new THREE.SphereGeometry(0.06, 5, 4), new THREE.MeshStandardMaterial({ color: 0xe8d060, emissive: 0x604000, roughness: 0.8 }), 0.14);
+  }
+
+  if (map.kind === "dungeon") {
+    const glow = { greenhills: 0xffd0a0, darkfang: 0xc0a0ff, ashfall: 0xff8050 }[map.mapId] || 0xffb060;
+    const sconceMat = new THREE.MeshStandardMaterial({ color: 0x40301c, roughness: 1 });
+    const flameMat = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 2.4, fog: false });
+    for (let w = 0; w < walls.length && wallIndex.size > 0; w++) {
+      const wall = walls[w];
+      if ((wall.x * 7 + wall.y * 13) % 23 !== 0) continue;
+      let adj = null;
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (floorIndex.has((wall.x + ox) + "," + (wall.y + oy))) { adj = [ox, oy]; break; }
+      }
+      if (!adj) continue;
+      const bx = wx(wall.x, map.w), by = wy(wall.y, map.h);
+      const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.3), sconceMat);
+      sconce.position.set(bx + adj[0] * 0.45, by + adj[1] * 0.45, 1);
+      mapGroup.add(sconce);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), flameMat);
+      flame.position.set(bx + adj[0] * 0.45, by + adj[1] * 0.45, 1.22);
+      flame.userData.flame = true;
+      flames.push(flame);
+      mapGroup.add(flame);
+      const lit = new THREE.PointLight(glow, 10, 6.5, 2);
+      lit.position.set(bx + adj[0] * 0.6, by + adj[1] * 0.6, 1.2);
+      lit.userData.flame = true;
+      flames.push(lit);
+      mapGroup.add(lit);
+    }
+  }
+
+  if (map.buildings) {
+    const matCache = new Map();
+    const paint = hex => {
+      if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.95, flatShading: true }));
+      return matCache.get(hex);
+    };
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 1 });
+    const winMat = new THREE.MeshStandardMaterial({ color: 0xffd8a0, emissive: 0xffa040, emissiveIntensity: 1.8, roughness: 0.3 });
+    for (const b of map.buildings) {
+      const cx = wx((b.x0 + b.x1) / 2, map.w), cy = wy((b.y0 + b.y1) / 2, map.h);
+      const bw = b.x1 - b.x0 + 1, bh = b.y1 - b.y0 + 1;
+      const bodyH = 1.9;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.12, bh + 0.12, bodyH), paint(b.wall || "#c8b088"));
+      body.position.set(cx, cy, bodyH / 2 + 0.03);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      mapGroup.add(body);
+      const rgeo = new THREE.ConeGeometry(1, 1.35, 4);
+      rgeo.rotateZ(Math.PI / 4);
+      rgeo.rotateX(Math.PI / 2);
+      const roof = new THREE.Mesh(rgeo, paint(b.roof));
+      const rw = bw + 0.9, rd = bh + 0.9;
+      roof.scale.set(rw / 1.414, rd / 1.414, 1);
+      roof.position.set(cx, cy, bodyH + 0.7);
+      roof.castShadow = true;
+      roof.userData.roof = true;
+      mapGroup.add(roof);
+      const chin = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 1.1), paint("#555050"));
+      chin.position.set(wx(b.x1 - 1, map.w), wy(b.y0 + 1, map.h), bodyH + 0.7);
+      chin.castShadow = true;
+      chin.userData.roof = true;
+      mapGroup.add(chin);
+      // doorway face: [dx, dy] outward + tile coords
+      const [dxT, dyT] = b.door;
+      const out = b.door[1] === b.y1 ? [0, 1] : b.door[1] === b.y0 ? [0, -1] : b.door[0] === b.x1 ? [1, 0] : [-1, 0];
+      const px = wx(dxT, map.w), py = wy(dyT, map.h);
+      const along = out[0] !== 0;
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(along ? 0.08 : 0.72, along ? 0.72 : 0.08, 1.5), woodMat);
+      panel.position.set(px + out[0] * 0.44, py + out[1] * 0.44, 0.78);
+      panel.castShadow = true;
+      mapGroup.add(panel);
+      for (const side of [-1, 1]) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(along ? 0.06 : 0.34, along ? 0.34 : 0.06, 0.34), winMat);
+        const off = (along ? bh : bw) / 3;
+        win.position.set(px + (along ? 0 : out[0] * 0.52) + (along ? side * off : 0),
+          py + (along ? out[1] * 0.52 : 0) + (along ? 0 : side * off), 1.28);
+        mapGroup.add(win);
+      }
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5),
+        new THREE.MeshStandardMaterial({ color: 0xffe0a0, emissive: 0xffb050, emissiveIntensity: 2.4, fog: false }));
+      lamp.position.set(px + out[0] * 0.6 + (along ? 0 : 0.5), py + out[1] * 0.6 + (along ? 0.5 : 0), 1.7);
+      mapGroup.add(lamp);
+      const glow = new THREE.PointLight(0xffb060, 6, 5, 2);
+      glow.position.set(px + out[0] * 0.8, py + out[1] * 0.8, 1.6);
+      mapGroup.add(glow);
+    }
+  }
+  if (map.stalls) {
+    for (const s of map.stalls) {
+      const sx = wx(s.x, map.w), sy = wy(s.y, map.h);
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 0.1),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(s.roof), roughness: 0.9 }));
+      canopy.position.set(sx, sy, 1.9);
+      canopy.castShadow = true;
+      mapGroup.add(canopy);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 1 }));
+      stripe.position.set(sx, sy + 0.35, 1.83);
+      mapGroup.add(stripe);
+      for (const [ox, oy] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) {
+        const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.9),
+          new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 1 }));
+        pole.position.set(sx + ox, sy + oy, 0.95);
+        mapGroup.add(pole);
+      }
+      const table = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.12),
+        new THREE.MeshStandardMaterial({ color: 0x8a6a44, roughness: 1 }));
+      table.position.set(sx, sy, 0.62);
+      table.castShadow = true;
+      mapGroup.add(table);
+    }
+  }
+  if (map.fountain) {
+    const fx = wx(map.fountain.x, map.w), fy = wy(map.fountain.y, map.h);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.12, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.9 }));
+    rim.position.set(fx, fy, 0.28);
+    mapGroup.add(rim);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.06, 12),
+      new THREE.MeshStandardMaterial({ color: 0x4090d0, emissive: 0x103050, emissiveIntensity: 1, roughness: 0.2, metalness: 0.3 }));
+    water.rotation.x = Math.PI / 2;
+    water.position.set(fx, fy, 0.32);
+    water.userData.water = true;
+    mapGroup.add(water);
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.7, 8),
+      new THREE.MeshStandardMaterial({ color: 0xb8bcc4, roughness: 0.8 }));
+    column.rotation.x = Math.PI / 2;
+    column.position.set(fx, fy, 0.5);
+    mapGroup.add(column);
+  }
 
   if (map.stairs) {
     const stairsGroup = new THREE.Group();
@@ -320,11 +472,29 @@ function losClear(x0, y0, x1, y1) {
 // ---------- entity bodies (voxel figures + icon cards, pooled) ----------
 
 const BOX = new THREE.BoxGeometry(1, 1, 1);
+const SPH = new THREE.SphereGeometry(0.5, 10, 8);
+const CAP = new THREE.CapsuleGeometry(0.5, 1, 4, 10);
 function part(group, mat, w, h, d, x, y, z, rz = 0) {
   const p = new THREE.Mesh(BOX, mat);
   p.scale.set(w, h, d);
   p.position.set(x, y, z);
   p.rotation.z = rz;
+  group.add(p);
+  return p;
+}
+function partS(group, mat, s, x, y, z, sz) {
+  const p = new THREE.Mesh(SPH, mat);
+  p.scale.set(s, s, sz || s);
+  p.position.set(x, y, z);
+  group.add(p);
+  return p;
+}
+function partC(group, mat, r, len, x, y, z, axis = "y") {
+  const p = new THREE.Mesh(CAP, mat);
+  p.scale.set(r / 0.5, (len + 2 * r) / 2, r / 0.5);
+  p.position.set(x, y, z);
+  if (axis === "z") p.rotation.x = Math.PI / 2;
+  if (axis === "x") p.rotation.z = Math.PI / 2;
   group.add(p);
   return p;
 }
@@ -344,12 +514,12 @@ function eyes(g, y, z, spread, size, color = 0xffdd44) {
   }
 }
 const EYE_POS = {
-  quadruped: [0.51, 0.46, 0.07, 0.05], spider: [0.36, 0.3, 0.05, 0.035],
-  bat: [0, 0.76, 0.06, 0.04, 0xff6666], skeleton: [0.14, 0.9, 0.08, 0.05, 0x88ddff],
-  float: [0.16, 1.38, 0.1, 0.055, 0xff4060], slab: [0.25, 0.7, 0.09, 0.06, 0xffa030],
-  harpy: [0.15, 1.0, 0.08, 0.05], imp: [0.11, 0.62, 0.07, 0.045, 0xff5050],
-  tall: [0.16, 1.27, 0.1, 0.055, 0x9fdcff], brute: [0.17, 0.97, 0.11, 0.06],
-  biped: [0.12, 0.92, 0.09, 0.05, 0xffee99]
+  quadruped: [0.55, 0.44, 0.07, 0.05], spider: [0.4, 0.28, 0.05, 0.035],
+  bat: [0.06, 0.74, 0.055, 0.04, 0xff6666], skeleton: [0.13, 0.92, 0.08, 0.05, 0x88ddff],
+  float: [0.13, 1.32, 0.1, 0.055, 0xff4060], slab: [0.3, 0.6, 0.08, 0.055, 0xffa030],
+  harpy: [0.14, 1.02, 0.08, 0.05], imp: [0.1, 0.64, 0.06, 0.045, 0xff5050],
+  tall: [0.14, 1.3, 0.1, 0.055, 0x9fdcff], brute: [0.18, 1.02, 0.11, 0.06],
+  biped: [0.15, 0.94, 0.09, 0.05, 0xffee99]
 };
 
 const SPECIES = {
@@ -360,12 +530,15 @@ const SPECIES = {
   harpy: { shape: "harpy", scale: 1.0 }, wraith: { shape: "float", scale: 1.0 },
   magma: { shape: "slab", scale: 1.35 }, shade: { shape: "float", scale: 0.95 },
   troll: { shape: "brute", scale: 1.45 }, wendigo: { shape: "tall", scale: 1.3 },
+  slime: { shape: "slab", scale: 0.8 }, bandit: { shape: "biped", scale: 0.95 },
+  zombie: { shape: "biped", scale: 1.02 }, beetle: { shape: "spider", scale: 0.7 },
+  banshee: { shape: "float", scale: 1.05 }, drake: { shape: "quadruped", scale: 1.15 },
   greenpaw: { shape: "brute", scale: 1.7 }, hagraven: { shape: "harpy", scale: 1.5 },
   cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 }
 };
 
 function makeVoxel(speciesId, glyph, color, isBoss) {
-  const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", "&": "troll" };
+  const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", s: "slime", B: "bandit", z: "zombie", c: "beetle", N: "banshee", D: "drake", "&": "troll" };
   const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
   const sp = known || { shape: isBoss ? "brute" : "biped", scale: isBoss ? 1.7 : 1 };
   const g = new THREE.Group();
@@ -375,96 +548,107 @@ function makeVoxel(speciesId, glyph, color, isBoss) {
   const head = p => { p.userData.head = true; return p; };
   switch (sp.shape) {
     case "quadruped":
-      part(g, mat, 0.34, 0.6, 0.3, 0, 0, 0.33);
-      head(part(g, mat, 0.26, 0.26, 0.26, 0, 0.38, 0.42));
-      part(g, dark, 0.12, 0.1, 0.1, 0, 0.52, 0.46);
-      part(g, dark, 0.06, 0.12, 0.06, -0.09, 0.4, 0.6);
-      part(g, dark, 0.06, 0.12, 0.06, 0.09, 0.4, 0.6);
-      for (const [lx, ly] of [[-0.12, -0.2], [0.12, -0.2], [-0.12, 0.2], [0.12, 0.2]])
-        part(g, dark, 0.07, 0.07, 0.22, lx, ly, 0.11);
-      part(g, dark, 0.05, 0.35, 0.05, 0, -0.45, 0.35, 0.6);
+      partC(g, mat, 0.17, 0.3, 0, 0, 0.35);
+      head(partS(g, mat, 0.3, 0, 0.42, 0.42));
+      part(g, dark, 0.12, 0.1, 0.1, 0, 0.55, 0.5);
+      part(g, dark, 0.06, 0.12, 0.06, -0.09, 0.44, 0.58);
+      part(g, dark, 0.06, 0.12, 0.06, 0.09, 0.44, 0.58);
+      for (const [lx, ly] of [[-0.12, -0.16], [0.12, -0.16], [-0.12, 0.18], [0.12, 0.18]])
+        partC(g, dark, 0.045, 0.14, lx, ly, 0.12, "z");
+      part(g, dark, 0.05, 0.35, 0.05, 0, -0.42, 0.35, 0.5);
       break;
     case "spider":
-      part(g, mat, 0.34, 0.34, 0.22, 0, 0, 0.26);
-      head(part(g, mat, 0.2, 0.2, 0.16, 0, 0.3, 0.26));
+      partS(g, mat, 0.38, 0, 0, 0.26, 0.26);
+      head(partS(g, mat, 0.22, 0, 0.3, 0.26));
       for (let leg = 0; leg < 8; leg++) {
         const side = leg % 2 ? 1 : -1, along = (leg >> 1) - 1.5;
         part(g, dark, 0.5, 0.05, 0.05, side * 0.32, along * 0.14, 0.18, side * 0.5);
       }
       break;
     case "bat":
-      part(g, mat, 0.22, 0.24, 0.26, 0, 0, 0.5);
-      head(part(g, mat, 0.16, 0.16, 0.16, 0, 0, 0.72));
+      partS(g, mat, 0.24, 0, 0, 0.5);
+      head(partS(g, mat, 0.16, 0, 0, 0.72));
       part(g, dark, 0.62, 0.06, 0.34, -0.38, 0, 0.58, 0.35);
       part(g, dark, 0.62, 0.06, 0.34, 0.38, 0, 0.58, -0.35);
       break;
     case "skeleton":
-      part(g, mat, 0.3, 0.45, 0.2, 0, 0, 0.45);
-      head(part(g, light, 0.28, 0.28, 0.26, 0, 0, 0.88));
-      part(g, mat, 0.06, 0.42, 0.06, -0.24, 0, 0.44);
-      part(g, mat, 0.06, 0.42, 0.06, 0.24, 0, 0.44);
-      part(g, mat, 0.07, 0.4, 0.07, -0.09, 0, 0.1);
-      part(g, mat, 0.07, 0.4, 0.07, 0.09, 0, 0.1);
-      part(g, dark, 0.24, 0.1, 0.1, 0, 0, 0.72);
+      partC(g, mat, 0.11, 0.3, 0, 0, 0.46);
+      head(partS(g, light, 0.3, 0, 0, 0.9));
+      part(g, mat, 0.34, 0.05, 0.16, 0, 0, 0.55);
+      part(g, mat, 0.3, 0.05, 0.14, 0, 0, 0.68);
+      partC(g, mat, 0.04, 0.36, -0.24, 0, 0.45, "z");
+      partC(g, mat, 0.04, 0.36, 0.24, 0, 0.45, "z");
+      partC(g, mat, 0.045, 0.34, -0.09, 0, 0.1, "z");
+      partC(g, mat, 0.045, 0.34, 0.09, 0, 0.1, "z");
+      part(g, dark, 0.24, 0.1, 0.1, 0, 0, 0.74);
       break;
-    case "float":
-      part(g, mat, 0.4, 0.4, 0.7, 0, 0, 0.85);
-      head(part(g, mat, 0.3, 0.3, 0.28, 0, 0, 1.35));
-      part(g, dark, 0.08, 0.3, 0.08, -0.26, 0, 0.95, 0.4);
-      part(g, dark, 0.08, 0.3, 0.08, 0.26, 0, 0.95, -0.4);
-      part(g, dark, 0.3, 0.3, 0.4, 0, 0, 0.4);
+    case "float": {
+      const robe = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.8, 10), mat);
+      robe.rotation.x = Math.PI / 2;
+      robe.position.set(0, 0, 0.68);
+      g.add(robe);
+      head(partS(g, mat, 0.28, 0, 0, 1.3));
+      partC(g, dark, 0.05, 0.24, -0.26, 0, 0.95, "z").rotation.y = 0.5;
+      partC(g, dark, 0.05, 0.24, 0.26, 0, 0.95, "z").rotation.y = -0.5;
       break;
+    }
     case "slab":
-      part(g, mat, 0.85, 0.65, 0.5, 0, 0, 0.3);
-      part(g, light, 0.5, 0.35, 0.18, 0, 0, 0.62);
-      head(part(g, mat, 0.25, 0.25, 0.3, 0, 0.25, 0.68));
-      part(g, light, 0.6, 0.1, 0.1, 0, -0.2, 0.55);
+      partS(g, mat, 0.85, 0, 0, 0.28, 0.32);
+      part(g, light, 0.6, 0.35, 0.1, 0, 0, 0.5);
+      head(partS(g, mat, 0.24, 0, 0.25, 0.6));
+      part(g, light, 0.7, 0.1, 0.1, 0, -0.25, 0.32);
       break;
     case "harpy":
-      part(g, mat, 0.34, 0.4, 0.26, 0, 0, 0.6);
-      head(part(g, light, 0.28, 0.28, 0.26, 0, 0, 0.98));
+      partC(g, mat, 0.14, 0.24, 0, 0, 0.62, "z");
+      head(partS(g, light, 0.28, 0, 0, 1));
       part(g, dark, 0.7, 0.08, 0.4, -0.42, 0, 0.75, 0.4);
       part(g, dark, 0.7, 0.08, 0.4, 0.42, 0, 0.75, -0.4);
-      part(g, dark, 0.08, 0.3, 0.08, -0.09, 0, 0.2);
-      part(g, dark, 0.08, 0.3, 0.08, 0.09, 0, 0.2);
-      part(g, light, 0.14, 0.12, 0.12, 0, 0.18, 1.0);
+      partC(g, dark, 0.04, 0.26, -0.08, 0, 0.2, "z");
+      partC(g, dark, 0.04, 0.26, 0.08, 0, 0.2, "z");
+      part(g, light, 0.14, 0.12, 0.12, 0, 0.18, 1.05);
       break;
     case "imp":
-      part(g, mat, 0.24, 0.26, 0.2, 0, 0, 0.32);
-      head(part(g, mat, 0.22, 0.22, 0.2, 0, 0, 0.6));
-      part(g, dark, 0.06, 0.2, 0.06, 0, 0, 0.78);
+      partS(g, mat, 0.22, 0, 0, 0.34);
+      head(partS(g, mat, 0.2, 0, 0, 0.62));
+      part(g, dark, 0.06, 0.2, 0.06, 0, 0, 0.8);
       part(g, dark, 0.4, 0.05, 0.24, -0.26, 0, 0.45, 0.45);
       part(g, dark, 0.4, 0.05, 0.24, 0.26, 0, 0.45, -0.45);
-      part(g, dark, 0.06, 0.22, 0.06, -0.07, 0, 0.1);
-      part(g, dark, 0.06, 0.22, 0.06, 0.07, 0, 0.1);
+      partC(g, dark, 0.035, 0.18, -0.07, 0, 0.1, "z");
+      partC(g, dark, 0.035, 0.18, 0.07, 0, 0.1, "z");
       break;
     case "tall":
-      part(g, mat, 0.36, 0.5, 0.26, 0, 0, 0.75);
-      head(part(g, light, 0.3, 0.36, 0.3, 0, 0, 1.25));
-      part(g, dark, 0.07, 0.32, 0.07, -0.14, 0.12, 1.5, -0.5);
-      part(g, dark, 0.07, 0.32, 0.07, 0.14, 0.12, 1.5, 0.5);
-      part(g, dark, 0.3, 0.1, 0.3, 0, 0, 1.05);
-      part(g, mat, 0.08, 0.5, 0.08, -0.1, 0, 0.28);
-      part(g, mat, 0.08, 0.5, 0.08, 0.1, 0, 0.28);
-      part(g, dark, 0.07, 0.55, 0.07, -0.24, 0, 1.05, 0.3);
-      part(g, dark, 0.07, 0.55, 0.07, 0.24, 0, 1.05, -0.3);
+      partC(g, mat, 0.14, 0.42, 0, 0, 0.78, "z");
+      head(partS(g, light, 0.3, 0, 0, 1.28));
+      {
+        const lh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.34, 6), dark);
+        lh.rotation.z = 1.1; lh.position.set(-0.14, 0, 1.46); g.add(lh);
+        const rh = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.34, 6), dark);
+        rh.rotation.z = -1.1; rh.position.set(0.14, 0, 1.46); g.add(rh);
+      }
+      part(g, dark, 0.3, 0.1, 0.3, 0, 0, 1.08);
+      partC(g, mat, 0.04, 0.44, -0.1, 0, 0.28, "z");
+      partC(g, mat, 0.04, 0.44, 0.1, 0, 0.28, "z");
+      partC(g, dark, 0.04, 0.5, -0.22, 0, 1.0, "z").rotation.y = 0.3;
+      partC(g, dark, 0.04, 0.5, 0.22, 0, 1.0, "z").rotation.y = -0.3;
       break;
     case "brute":
-      part(g, mat, 0.62, 0.5, 0.36, 0, 0, 0.5);
-      head(part(g, mat, 0.34, 0.3, 0.32, 0, 0, 0.95));
-      part(g, dark, 0.16, 0.14, 0.16, 0, 0.18, 1.05);
-      part(g, dark, 0.1, 0.26, 0.1, -0.14, 0.1, 1.12, -0.5);
-      part(g, dark, 0.1, 0.26, 0.1, 0.14, 0.1, 1.12, 0.5);
-      part(g, dark, 0.16, 0.42, 0.16, -0.4, 0, 0.5);
-      part(g, dark, 0.16, 0.42, 0.16, 0.4, 0, 0.5);
-      part(g, dark, 0.14, 0.36, 0.14, -0.14, 0, 0.14);
-      part(g, dark, 0.14, 0.36, 0.14, 0.14, 0, 0.14);
+      partC(g, mat, 0.24, 0.24, 0, 0, 0.52, "z");
+      head(partS(g, mat, 0.34, 0, 0, 1));
+      part(g, dark, 0.16, 0.14, 0.16, 0, 0.2, 1.1);
+      partS(g, dark, 0.2, -0.32, 0, 0.64);
+      partS(g, dark, 0.2, 0.32, 0, 0.64);
+      partC(g, dark, 0.09, 0.28, -0.42, 0, 0.48, "z");
+      partC(g, dark, 0.09, 0.28, 0.42, 0, 0.48, "z");
+      partC(g, dark, 0.1, 0.2, -0.13, 0, 0.18, "z");
+      partC(g, dark, 0.1, 0.2, 0.13, 0, 0.18, "z");
       break;
     default:
-      part(g, mat, 0.42, 0.5, 0.28, 0, 0, 0.42);
-      head(part(g, mat, 0.36, 0.36, 0.34, 0, 0, 0.9));
-      part(g, dark, 0.09, 0.16, 0.09, -0.11, 0.1, 1.08);
-      part(g, dark, 0.09, 0.16, 0.09, 0.11, 0.1, 1.08);
+      partC(g, mat, 0.16, 0.24, 0, 0, 0.46, "z");
+      head(partS(g, mat, 0.36, 0, 0, 0.92));
+      part(g, dark, 0.09, 0.16, 0.09, -0.11, 0.1, 1.1);
+      part(g, dark, 0.09, 0.16, 0.09, 0.11, 0.1, 1.1);
+      partC(g, dark, 0.055, 0.2, -0.1, 0, 0.14, "z");
+      partC(g, dark, 0.055, 0.2, 0.1, 0, 0.14, "z");
   }
   const ep = EYE_POS[sp.shape];
   if (ep) eyes(g, ep[0], ep[1], ep[2], ep[3], ep[4]);
@@ -476,7 +660,14 @@ function makeVoxel(speciesId, glyph, color, isBoss) {
 }
 
 function applyShadows(g) {
-  g.traverse(o => { if (o.isMesh && !o.userData.noShadow) o.castShadow = true; });
+  const mats = new Set();
+  g.traverse(o => {
+    if (o.isMesh && !o.userData.noShadow) {
+      o.castShadow = true;
+      if (o.material && !o.material.emissiveIntensity) mats.add(o.material);
+    }
+  });
+  g.userData.mats = [...mats];
 }
 function addBlobShadow(g, r) {
   const blob = new THREE.Mesh(new THREE.CircleGeometry(r, 14),
@@ -484,6 +675,38 @@ function addBlobShadow(g, r) {
   blob.position.z = 0.02;
   blob.userData.noShadow = true;
   g.add(blob);
+}
+
+function makeProp(e, dims) {
+  const g = new THREE.Group();
+  if (e.kind === "chest") {
+    const wood = new THREE.MeshStandardMaterial({ color: e.locked ? 0x6a4326 : 0x7a5230, roughness: 0.9, flatShading: true });
+    const band = new THREE.MeshStandardMaterial({ color: e.locked ? 0xc0502a : 0xd8b040, metalness: 0.6, roughness: 0.4 });
+    part(g, wood, 0.78, 0.52, 0.44, 0, 0, 0.26);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.76, 8, 1, false, 0, Math.PI), wood);
+    lid.rotation.z = Math.PI / 2;
+    lid.position.set(0, 0, 0.5);
+    g.add(lid);
+    part(g, band, 0.12, 0.56, 0.5, 0, 0, 0.3);
+    if (e.locked) part(g, band, 0.14, 0.16, 0.12, 0, 0.3, 0.36);
+  } else {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a3c22, roughness: 0.95, flatShading: true });
+    const iron = new THREE.MeshStandardMaterial({ color: e.locked ? 0xc05028 : 0x808890, metalness: 0.7, roughness: 0.4 });
+    part(g, wood, 0.2, 0.86, 1.5, 0, 0, 0.8);
+    part(g, iron, 0.24, 0.94, 0.12, 0, 0, 0.28);
+    part(g, iron, 0.24, 0.94, 0.12, 0, 0, 1.32);
+    part(g, iron, 0.24, 0.12, 1.5, 0, -0.42, 0.8);
+    part(g, iron, 0.24, 0.12, 1.5, 0, 0.42, 0.8);
+    if (e.locked) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.035, 6, 12), iron);
+      ring.rotation.y = Math.PI / 2;
+      ring.position.set(0.16, 0, 0.78);
+      g.add(ring);
+    }
+  }
+  addBlobShadow(g, 0.42);
+  applyShadows(g);
+  return g;
 }
 
 function makePlayerVoxel(classId, color) {
@@ -494,24 +717,25 @@ function makePlayerVoxel(classId, color) {
   part(g, cloth, 0.13, 0.13, 0.32, -0.1, 0, 0.15);
   part(g, cloth, 0.13, 0.13, 0.32, 0.1, 0, 0.15);
   if (classId === "fighter") {
-    part(g, mat, 0.16, 0.16, 0.2, -0.29, 0, 0.62);
-    part(g, mat, 0.16, 0.16, 0.2, 0.29, 0, 0.62);
+    partS(g, mat, 0.15, -0.27, 0, 0.64);
+    partS(g, mat, 0.15, 0.27, 0, 0.64);
     part(g, mat, 0.09, 0.09, 0.7, 0.34, 0, 0.62);
     part(g, mat, 0.16, 0.3, 0.02, -0.34, 0.16, 0.55);
-    part(g, mat, 0.38, 0.1, 0.38, 0, 0, 1.12);
+    part(g, mat, 0.38, 0.1, 0.38, 0, 0, 1.14);
   } else if (classId === "mage") {
-    const hat = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.36, 6), cloth);
-    hat.position.set(0, 0, 1.32);
+    const hat = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 6), cloth);
+    hat.rotation.x = Math.PI / 2;
+    hat.position.set(0, 0, 1.36);
     g.add(hat);
-    part(g, mat, 0.3, 0.3, 0.35, 0, 0, 1.62);
+    partS(g, mat, 0.2, 0, 0, 1.66);
     part(g, mat, 0.06, 0.06, 0.8, 0.34, 0, 0.66);
   } else {
     part(g, cloth, 0.5, 0.5, 0.34, 0, 0, 0.28);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 16), mat);
-    halo.position.set(0, 0, 1.28);
+    halo.position.set(0, 0, 1.3);
     g.add(halo);
     part(g, mat, 0.07, 0.07, 0.55, -0.32, 0, 0.58);
-    part(g, mat, 0.18, 0.18, 0.1, -0.32, 0, 0.9);
+    partS(g, mat, 0.16, -0.32, 0, 0.92);
   }
   addBlobShadow(g, 0.36);
   applyShadows(g);
@@ -528,6 +752,19 @@ function rebuildEntities() {
   const seen = new Set();
   const t = performance.now() / 1000;
   for (const e of core.entities()) {
+    if (e.kind === "chest" || e.kind === "door") {
+      const key = "prop:" + loadedKey + ":" + e.kind + ":" + (e.locked ? "l" : "o") + ":" + e.x + "," + e.y;
+      seen.add(key);
+      const vis = visibleSet.has(e.x + "," + e.y);
+      if (!pool.has(key)) {
+        pool.set(key, makeProp(e, mapDims));
+        const g = pool.get(key);
+        g.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0);
+        entityGroup.add(g);
+      }
+      pool.get(key).visible = vis;
+      continue;
+    }
     if (e.kind === "stairs" || e.kind === "item" || e.kind === "npc" || e.kind === "portal" || e.kind === "entrance") {
       const key = "card:" + loadedKey + ":" + e.kind + ":" + e.x + "," + e.y;
       seen.add(key);
@@ -538,7 +775,13 @@ function rebuildEntities() {
         pool.set(key, s);
       }
       const c = pool.get(key);
-      if (c) c.visible = visibleSet.has(e.x + "," + e.y);
+      if (c) {
+        c.visible = visibleSet.has(e.x + "," + e.y);
+        if (c.visible && e.kind === "item") {
+          c.position.z = 0.7 + 0.07 * Math.sin(t * 2.6 + e.x + e.y);
+          c.material.rotation = Math.sin(t * 1.4 + e.x) * 0.1;
+        }
+      }
       continue;
     }
     if (e.kind !== "monster") continue;
@@ -566,6 +809,21 @@ function rebuildEntities() {
     const bar = g.userData.bar;
     bar.visible = e.hp < e.maxHp;
     bar.scale.x = Math.max(0.05, e.hp / e.maxHp);
+    if (e.facing) {
+      const target = Math.atan2(-e.facing.dx, e.facing.dy);
+      let d = target - g.rotation.z;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      g.rotation.z += d * 0.3;
+    }
+    if ((g.userData.lastHp ?? e.hp) > e.hp) g.userData.flashUntil = t + 0.35;
+    g.userData.lastHp = e.hp;
+    const flashing = t < (g.userData.flashUntil || 0);
+    if (flashing !== g.userData.flashOn) {
+      g.userData.flashOn = flashing;
+      for (const m of g.userData.mats || []) {
+        m.emissive.setHex(flashing ? 0x903020 : 0x000000);
+      }
+    }
   }
   for (const [key, obj] of pool) {
     if (!seen.has(key)) { entityGroup.remove(obj); pool.delete(key); }
@@ -576,7 +834,11 @@ function rebuildEntities() {
     scene.add(playerSprite);
   }
   playerSprite.position.set(wx(core.player.x, mapDims.w), wy(core.player.y, mapDims.h), 0);
-  playerSprite.rotation.z = Math.sin(t * 3) * 0.04;
+  const pf = core.player.facing || { dx: 1, dy: 0 };
+  const pTarget = Math.atan2(-pf.dx, pf.dy);
+  let pd = pTarget - playerSprite.rotation.z;
+  pd = Math.atan2(Math.sin(pd), Math.cos(pd));
+  playerSprite.rotation.z += pd * 0.55;
 }
 
 // ---------- HUD ----------
@@ -610,21 +872,43 @@ function renderLog() {
 function renderInventory(s) {
   const inv = el("inv");
   if (!inv.classList.contains("open")) return;
+  const shopOpen = el("shop").style.display === "block";
   inv.innerHTML = "<h3>Pack</h3>" + s.player.bag.map(it => {
     let btn = "";
     if (["weapon", "armor", "trinket"].includes(it.kind)) btn = `<button data-act="equip" data-uid="${it.uid}">Equip</button>`;
-    if (it.kind === "potion" || it.kind === "book") btn = `<button data-act="use" data-uid="${it.uid}">Use</button>`;
+    if (it.kind === "potion" || it.kind === "book" || it.kind === "scroll-identify")
+      btn += ` <button data-act="use" data-uid="${it.uid}">Use</button>`;
+    if (["weapon", "armor", "trinket"].includes(it.kind) && it.ident === false)
+      btn += ` <button data-act="identify" data-uid="${it.uid}">Identify</button>`;
     btn += ` <button data-act="drop" data-uid="${it.uid}">Drop</button>`;
+    if (shopOpen) btn += ` <button data-act="sell" data-uid="${it.uid}">Sell</button>`;
     const ic = it.icon ? `<img src="assets/img/${it.icon}.png" class="ic" style="filter: invert(1);">` : it.glyph;
     return `<div class="row" style="color:${it.color}">${ic} ${it.label} ${btn}</div>`;
   }).join("") || "<div class='row'>empty</div>";
 }
+function renderShop() {
+  const sh = el("shop");
+  if (sh.style.display !== "block") return;
+  const vendor = core.nearbyVendor();
+  if (!vendor) return;
+  sh.innerHTML = `<h3>${VENDORS[vendor.npcId].name}</h3>` + SHOP.filter(g => g.vendor === vendor.npcId).map(g =>
+    `<div class="row" style="color:#e8d090">${g.name} — ${g.price}g <button data-act="buy" data-key="${g.key}">Buy</button></div>`).join("") +
+    `<div class="row" style="color:#889">Sell from your Pack (I) — unidentified goods fetch a scrap.</div>`;
+}
+el("shop").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.act === "buy") core.act({ type: "buy", key: b.dataset.key });
+  afterAction();
+});
 el("inv").addEventListener("click", e => {
   const b = e.target.closest("button");
   if (!b) return;
   const uid = Number(b.dataset.uid);
   if (b.dataset.act === "equip") core.act({ type: "equip", uid });
   else if (b.dataset.act === "drop") core.act({ type: "drop", uid });
+  else if (b.dataset.act === "sell") core.act({ type: "sell", uid });
+  else if (b.dataset.act === "identify") core.act({ type: "identify", uid });
   else core.act({ type: "useItem", uid });
   afterAction();
 });
@@ -687,6 +971,8 @@ function drawMinimap() {
     else if (e.kind === "npc") dot(e.x, e.y, "#50c878");
     else if (e.kind === "entrance") dot(e.x, e.y, "#ff8030", Math.max(3, s * 0.8));
     else if (e.kind === "portal") dot(e.x, e.y, "#b060ff");
+    else if (e.kind === "chest") dot(e.x, e.y, e.locked ? "#d06030" : "#e0b040", Math.max(2, s * 0.5));
+    else if (e.kind === "door") dot(e.x, e.y, "#b06060", Math.max(2, s * 0.5));
   }
   dot(core.player.x, core.player.y, "#ffffff", Math.max(2.5, s * 0.7));
 }
@@ -784,6 +1070,8 @@ function afterAction() {
   el("stats").style.display = el("skills").style.display = "block";
   const map = core.getMap(core.player.mapKey);
   if (map.key !== loadedKey) { loadedKey = map.key; buildMapMeshes(map); }
+  el("shop").style.display = core.nearbyVendor() ? "block" : "none";
+  renderShop();
   refreshFov();
   renderHud();
   renderLog();
@@ -798,6 +1086,7 @@ window.addEventListener("keydown", e => {
   else if (e.key === "." || e.key === "5") { core.act({ type: "move", dx: 0, dy: 0 }); afterAction(); }
   else if (e.key === "e" || e.key === "E") { core.act({ type: "interact" }); afterAction(); }
   else if (e.key === ">" || e.key === ">") { core.act({ type: "descend" }); afterAction(); }
+  else if (e.key === "<" || e.key === ",") { core.act({ type: "ascend" }); afterAction(); }
   else if (e.key === "i" || e.key === "I") { el("inv").classList.toggle("open"); renderHud(); }
   else if (e.key === "m" || e.key === "M") {
     mapOpen = !mapOpen;
@@ -837,6 +1126,10 @@ function loop() {
     dustPos[i * 3] += Math.sin(tsec * 0.8 + dustSeed[i]) * 0.004;
   }
   dustGeo.attributes.position.needsUpdate = true;
+  for (const f of flames) {
+    if (f.isPointLight) f.intensity = 9 + 3 * Math.sin(tsec * 9 + f.position.x * 3) + 2 * Math.sin(tsec * 17 + f.position.y);
+    else f.scale.setScalar(0.85 + 0.3 * Math.sin(tsec * 9 + f.position.x * 3));
+  }
   renderer.render(scene, camera);
   const now = performance.now();
   if (mapOpen && now - mmLast > 250) { mmLast = now; drawMinimap(); }
@@ -855,6 +1148,8 @@ window.game = {
   act: a => core.act(a),
   travel: (t, tier) => { core.act({ type: "travel", target: t, tier }); afterAction(); },
   descend: () => { core.act({ type: "descend" }); afterAction(); },
+  ascend: () => { core.act({ type: "ascend" }); afterAction(); },
+  heroAngle: () => playerSprite ? playerSprite.rotation.z : null,
   interact: () => { core.act({ type: "interact" }); afterAction(); },
   stepTowards: (x, y) => { const r = core.stepTowards(x, y); afterAction(); return r; },
   monsters: () => core.monstersNear(),

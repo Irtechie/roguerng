@@ -30,6 +30,9 @@
   #help { top: 10px; left: 50%; transform: translateX(-50%); color: #667; font-size: 11px; }
   #minimap { position: absolute; top: 40px; right: 10px; display: none; background: rgba(5,6,12,0.85); border: 1px solid #334; image-rendering: pixelated; z-index: 5; }
   #vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(2,3,8,0.5) 100%); z-index: 3; }
+  #shop { position: absolute; left: 10px; top: 110px; width: 250px; display: none; background: rgba(10,10,20,0.92); border: 1px solid #554; padding: 8px; z-index: 6; font-size: 12px; }
+  #shop h3 { margin: 0 0 6px; color: #ffd76a; font-size: 13px; }
+  #shop button, #inv button { margin-left: 4px; font: inherit; font-size: 10px; background: #22305a; color: #cfe; border: 1px solid #446; border-radius: 3px; cursor: pointer; }
   #create, #death {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(3,4,10,0.92); z-index: 10; flex-direction: column;
@@ -55,12 +58,13 @@
   <div id="scene"></div>
   <div id="vignette"></div>
   <canvas id="minimap" width="180" height="180"></canvas>
+  <div id="shop" class="panel"></div>
 
   <div id="stats" class="panel" style="display:none"></div>
   <div id="skills" class="panel" style="display:none"></div>
   <div id="log" class="panel"></div>
   <div id="inv" class="panel"></div>
-  <div id="help" class="panel">WASD move &bull; 1-4 skills &bull; E talk &bull; &gt; descend &bull; I pack &bull; M map &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
+  <div id="help" class="panel">WASD move &bull; 1-6 skills &bull; E talk/open &bull; &gt; descend &bull; &lt; climb up &bull; I pack &bull; M map &bull; click to walk/use &bull; keys open chests/doors by walking into them &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
 
   <div id="create">
     <div class="box">

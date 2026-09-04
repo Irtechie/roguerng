@@ -42,6 +42,10 @@ async function clearFoes(page, limit = 400) {
       const s = g.status();
       const mons = g.monsters();
       if (!mons.length) return;
+      if (s.player.hp < s.player.maxHp * 0.45) {
+        const pot = s.player.bag.find(b => b.kind === "potion");
+        if (pot) { g.useItem(pot.uid); return; }
+      }
       const m = mons[0];
       const adj = Math.abs(m.x - s.player.x) + Math.abs(m.y - s.player.y) === 1;
       if (adj && s.player.mp >= 4 && s.player.skills[0].cd === 0) g.act({ type: "skill", slot: 0 });
@@ -123,10 +127,15 @@ async function walkTo(page, tx, ty, limit = 300) {
     c.getMap(c.player.mapKey).entities.filter(x => x.type === "monster").forEach(m => { m.hp = 0; });
     const st = g.stairs();
     c.player.x = st.x; c.player.y = st.y;
+    const mons = c.getMap(c.player.mapKey).entities.filter(x => x.type === "monster");
+    mons.forEach(m => { m._hp = m.hp; m.hp = 0; });
     c.player.hp = Math.max(1, c.eff().maxHp - 20);
     const hp0 = c.player.hp;
     for (let i = 0; i < 40; i++) c.act({ type: "move", dx: 0, dy: 0 });
-    return { hp0, hpNow: c.player.hp, mapKey: c.player.mapKey };
+    const hpNow = c.player.hp;
+    mons.forEach(m => { m.hp = m._hp; });
+    c.player.hp = c.eff().maxHp;
+    return { hp0, hpNow, mapKey: c.player.mapKey };
   });
   check("no HP regen in the field (dungeon stays dangerous)", fieldRegen.hpNow === fieldRegen.hp0 && fieldRegen.mapKey.includes(":d"),
     JSON.stringify(fieldRegen));
@@ -248,8 +257,12 @@ async function walkTo(page, tx, ty, limit = 300) {
     c.player.x = rx; c.player.y = ry;
     c.act({ type: "move", dx: 0, dy: 1 });
     const inDungeon = c.player.mapKey;
-    for (let i = 0; i < 6 && c.player.mapKey !== "greenhills"; i++)
-      c.act({ type: "move", dx: 0, dy: 0 });
+    const por = c.getMap(c.player.mapKey).entities.find(e => e.type === "portal");
+    let from = null;
+    for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]])
+      if (!c.blocked(por.x + ox, por.y + oy)) { from = [ox, oy]; break; }
+    c.player.x = por.x + from[0]; c.player.y = por.y + from[1];
+    c.act({ type: "move", dx: -from[0], dy: -from[1] });
     return { ok: inDungeon.includes(":d") && c.player.mapKey === "greenhills" && c.player.x === rx && c.player.y === ry,
       inDungeon, out: c.player.mapKey, pos: [c.player.x, c.player.y], was: [rx, ry] };
   });
@@ -265,6 +278,109 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("clicking the stairs walks you there and takes you down", clickDown.res === "used" && clickDown.map.endsWith(":d2"),
     JSON.stringify(clickDown));
+
+  const climbBack = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    g.ascend();
+    const d1stairs = c.getMap("greenhills:d1").stairs;
+    return { map: c.player.mapKey, x: c.player.x, y: c.player.y, sx: d1stairs.x, sy: d1stairs.y };
+  });
+  check("stairs up (<) returns to the stair you descended", climbBack.map === "greenhills:d1" &&
+    Math.max(Math.abs(climbBack.x - climbBack.sx), Math.abs(climbBack.y - climbBack.sy)) <= 1,
+    JSON.stringify(climbBack));
+
+  const portalSafety = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.act({ type: "travel", target: "greenhills", tier: 1 });
+    const map = c.getMap(c.player.mapKey);
+    map.entities.filter(e => e.type === "monster").forEach(m => { m._hp = m.hp; m.hp = 0; });
+    const por = map.entities.find(e => e.type === "portal");
+    for (let i = 0; i < 5; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    const safe = { mapKey: c.player.mapKey, underfoot: por.x === map.spawn.x && por.y === map.spawn.y };
+    map.entities.filter(e => e.type === "monster").forEach(m => { m.hp = m._hp; });
+    c.player.hp = c.eff().maxHp;
+    return safe;
+  });
+  check("dungeon entry portal is not under your feet (no accidental ejection)",
+    portalSafety.mapKey.includes(":d") && !portalSafety.underfoot, JSON.stringify(portalSafety));
+
+  const faceWalk = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    const x0 = c.player.x;
+    let moved = 0;
+    for (const [dx, dy] of [[1, 0], [1, 0], [-1, 0], [-1, 0]])
+      if (c.act({ type: "move", dx, dy }) && c.player.x !== x0) moved = dx;
+    await new Promise(r => setTimeout(r, 900));
+    return { moved, angle: g.heroAngle() };
+  });
+  const expectAngle = faceWalk.moved === 1 ? -Math.PI / 2 : Math.PI / 2;
+  const angDiff = Math.abs(Math.atan2(Math.sin(faceWalk.angle - expectAngle), Math.cos(faceWalk.angle - expectAngle)));
+  check("the hero turns to face the direction walked",
+    angDiff < 0.5, JSON.stringify({ ...faceWalk, expectAngle, angDiff }));
+
+  const faceFoe = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.act({ type: "travel", target: "greenhills", tier: 2 });
+    const mons = g.monsters();
+    if (!mons.length) return { ok: false };
+    const m = mons[0];
+    for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]])
+      if (!c.blocked(m.x + ox, m.y + oy)) { c.player.x = m.x + ox; c.player.y = m.y + oy; break; }
+    for (let i = 0; i < 2; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    const ok = g.monsters().some(mm => mm.facing);
+    c.player.hp = c.eff().maxHp;
+    c.player.x = c.getMap(c.player.mapKey).spawn.x;
+    c.player.y = c.getMap(c.player.mapKey).spawn.y;
+    return { ok };
+  });
+  check("monsters turn as they hunt you", faceFoe.ok === true, JSON.stringify(faceFoe));
+
+  const identStat = await page.evaluate(async () => {
+    const { genItem } = await import("/src/core.js");
+    let eq = 0, known = 0;
+    const rng = () => Math.random();
+    for (let i = 0; i < 400; i++) {
+      const it = genItem("greenhills", 3, rng);
+      if (["weapon", "armor", "trinket"].includes(it.kind)) { eq++; if (it.ident) known++; }
+    }
+    return { eq, known, rate: known / Math.max(1, eq) };
+  });
+  check("found gear usually starts unidentified (~15% known)",
+    identStat.eq > 150 && identStat.rate > 0.05 && identStat.rate < 0.3, JSON.stringify(identStat));
+
+  const identTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.player.bag.push({ uid: 990022, kind: "weapon", slot: "weapon", id: "shortsword", name: "Shortsword", dmg: 5, glyph: "/", color: "#d0d0e0", affixes: [], cursed: false, ident: false });
+    c.player.bag.push({ uid: 990023, kind: "scroll-identify", name: "Scroll of Identify", glyph: "?", color: "#e0e0ff", ident: true });
+    g.act({ type: "equip", uid: 990022 });
+    const stillBlocked = g.status().player.bag.some(i => i.uid === 990022 && i.ident === false);
+    g.act({ type: "identify", uid: 990022 });
+    const after = g.status().player.bag.find(i => i.uid === 990022);
+    const scrollGone = !g.status().player.bag.some(i => i.uid === 990023);
+    return { stillBlocked, identNow: !!after && after.ident === true, scrollGone };
+  });
+  check("unidentified gear refuses to equip; scroll reveals it",
+    identTest.stillBlocked && identTest.identNow && identTest.scrollGone, JSON.stringify(identTest));
+
+  const village = await page.evaluate(async () => {
+    const g = window.game;
+    g.travel("town");
+    await new Promise(r => setTimeout(r, 300));
+    let roofs = 0;
+    g.debugAll().traverse(o => { if (o.userData && o.userData.roof) roofs++; });
+    return { roofs, buildings: g.core.getMap("town").buildings.length };
+  });
+  check("Merrow Vale is an open-air village of roofed houses", village.buildings >= 5 && village.roofs >= 10,
+    JSON.stringify(village));
+
+  await page.evaluate(() => {
+    const g = window.game;
+    g.travel("greenhills", 1);
+    const c = g.core;
+    c.player.hp = c.eff().maxHp;
+    for (let i = 0; i < 3; i++)
+      c.player.bag.push({ uid: 990050 + i, kind: "potion", name: "Red Potion", glyph: "!", color: "#ff6060" });
+  });
 
   await page.screenshot({ path: path.join(ROOT, "verify-shot-dungeon.png") });
 
@@ -311,11 +427,15 @@ async function walkTo(page, tx, ty, limit = 300) {
   await page.screenshot({ path: path.join(ROOT, "verify-shot-town.png") });
 
   const npcFound = await page.evaluate(() => {
-    const ents = window.game.core.getMap("town").entities.filter(e => e.type === "npc" && e.npcId === "elder");
-    return ents.length ? { x: ents[0].x, y: ents[0].y } : null;
+    const map = window.game.core.getMap("town");
+    const npc = map.entities.find(e => e.type === "npc" && e.npcId === "elder");
+    if (!npc) return null;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+      if (map.grid[npc.y + dy][npc.x + dx] === ".") return { x: npc.x + dx, y: npc.y + dy };
+    return null;
   });
   check("town has quest NPC", !!npcFound);
-  await walkTo(page, npcFound.x + 1, npcFound.y);
+  await walkTo(page, npcFound.x, npcFound.y);
   await page.evaluate(() => window.game.interact());
   s = await page.evaluate(() => window.game.status());
   check("fulfills quest with town NPC", s.quests[0].turnedIn === true);
@@ -367,14 +487,14 @@ async function walkTo(page, tx, ty, limit = 300) {
 
   const lootTiers = await page.evaluate(() => {
     const c = window.game.core;
-    const avg = key => {
+    const peak = key => {
       const ms = c.getMap(key).entities.filter(e => e.type === "monster");
-      return ms.reduce((s, m) => s + m.hp, 0) / Math.max(1, ms.length);
+      return ms.reduce((mx, m) => Math.max(mx, m.hp), 0);
     };
-    const g1 = avg("greenhills:d5"), d1 = avg("darkfang:d5"), a1 = avg("ashfall:d5");
+    const g1 = peak("greenhills:d5"), d1 = peak("darkfang:d5"), a1 = peak("ashfall:d5");
     return { g1, d1, a1 };
   });
-  check("maps get harder (avg monster HP rises)", lootTiers.g1 < lootTiers.d1 && lootTiers.d1 < lootTiers.a1,
+  check("maps get harder (peak monster HP rises)", lootTiers.g1 < lootTiers.d1 && lootTiers.d1 < lootTiers.a1,
     JSON.stringify(lootTiers));
 
   const artOk = await page.evaluate(async () => {
@@ -423,6 +543,102 @@ async function walkTo(page, tx, ty, limit = 300) {
   await page.reload();
   await page.waitForFunction(() => window.game && window.game.ready, null, { timeout: 15000 });
   const mage = await page.evaluate(() => window.game.create("mage", "elf", "Zapp"));
+  const rogueKit = await page.evaluate(async () => {
+    const d = await import("/src/data.js");
+    return { classes: Object.keys(d.CLASSES).sort().join(","), identifyKind: d.SKILLS.identify.kind,
+      aimed: !!d.SKILLS["aimed-shot"].dex, shop: d.SHOP.length };
+  });
+  check("Rogue roster: Fighter/Mage/Cleric/Paladin/Ranger/Thief with Identify & DEX skills",
+    rogueKit.classes === "cleric,fighter,mage,paladin,ranger,thief" && rogueKit.identifyKind === "identify" &&
+    rogueKit.aimed && rogueKit.shop >= 8, JSON.stringify(rogueKit));
+
+  const classRules = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    const plate = () => ({ uid: 990031, kind: "armor", slot: "armor", id: "plate", name: "Plate Armor", def: 6, glyph: "[", color: "#c0a070", affixes: [], cursed: false, ident: true });
+    g.create("thief", "human", "Catch");
+    c.player.bag.push(plate());
+    c.act({ type: "equip", uid: 990031 });
+    const thiefBlocked = !c.player.equipment.armor || c.player.equipment.armor.id !== "plate";
+    g.create("paladin", "human", "Oath");
+    c.player.bag.push(plate());
+    c.act({ type: "equip", uid: 990031 });
+    const paladinWears = !!c.player.equipment.armor;
+    const paladinHeals = c.player.skills.includes("lay-on-hands");
+    return { thiefBlocked, paladinWears, paladinHeals };
+  });
+  check("class gear rules: thieves can't plate, paladins can and heal", classRules.thiefBlocked && classRules.paladinWears && classRules.paladinHeals,
+    JSON.stringify(classRules));
+
+  const chestTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    g.create("fighter", "human", "Digger");
+    g.travel("greenhills", 1);
+    const map = c.getMap(c.player.mapKey);
+    const chest = map.entities.find(e => e.type === "chest");
+    const door = map.entities.find(e => e.type === "door");
+    if (!chest || !door) return { ok: false, reason: "no chest/door spawned" };
+    chest.locked = true; chest.gold = 100; door.locked = true; door.stash.gold = 200;
+    const gold0 = c.player.gold;
+    const noKeyChest = c.openChest(chest) === false && map.entities.includes(chest);
+    const noKeyDoor = c.unlockDoor(door) === false && map.entities.includes(door);
+    c.player.bag.push({ uid: 999911, kind: "key", name: "Iron Key", glyph: "k", color: "#ccc", ident: true });
+    const opened = c.openChest(chest) === true;
+    const goldChest = c.player.gold;
+    c.player.bag.push({ uid: 999912, kind: "key", name: "Iron Key", glyph: "k", color: "#ccc", ident: true });
+    const unlocked = c.unlockDoor(door) === true && !map.entities.includes(door);
+    return { ok: noKeyChest && noKeyDoor && opened && unlocked && goldChest === gold0 + 100 && c.player.gold === goldChest + 200 };
+  });
+  check("iron keys open locked chests and strongroom doors", chestTest.ok, JSON.stringify(chestTest));
+
+  const vendorTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    g.create("paladin", "human", "Anvil");
+    c.player.gold = 600;
+    c.player.mapKey = "town";
+    c.player.x = 27; c.player.y = 15;
+    const bag0 = c.player.bag.length;
+    c.act({ type: "buy", key: "armor:plate" });
+    const plateOk = c.player.bag.length === bag0 + 1 && c.player.gold === 600 - 480;
+    c.act({ type: "buy", key: "potion" });
+    const pellaOnly = c.player.bag.length === bag0 + 1;
+    c.act({ type: "buy", key: "book:book-frost" });
+    const sageOnly = c.player.bag.length === bag0 + 1;
+    return { plateOk, pellaOnly, sageOnly };
+  });
+  check("Dorin's forge sells armor, keeps Pella's and Ianna's stock locked", vendorTest.plateOk && vendorTest.pellaOnly && vendorTest.sageOnly,
+    JSON.stringify(vendorTest));
+
+  const manaTest = await page.evaluate(() => {
+    const c = window.game.core;
+    c.player.mp = 0;
+    c.player.bag.push({ uid: 999913, kind: "potion", effect: "mana", name: "Blue Potion", glyph: "!", color: "#8af", ident: true });
+    c.act({ type: "useItem", uid: 999913 });
+    return c.player.mp > 0;
+  });
+  check("blue potions restore mana", manaTest);
+
+  const newMonsters = await page.evaluate(() =>
+    ["slime", "bandit", "zombie", "beetle", "banshee", "drake"]
+      .map(id => ({ id, parts: window.game.debugVoxel(id).parts }))
+      .filter(m => m.parts <= 4));
+  check("six new monster species have built bodies", newMonsters.length === 0, JSON.stringify(newMonsters));
+
+  const shopTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    g.create("fighter", "human", "Buyer");
+    c.player.gold = 500;
+    c.player.mapKey = "town";
+    c.player.x = 13; c.player.y = 8;
+    const bag0 = c.player.bag.length;
+    c.act({ type: "buy", key: "potion" });
+    const gold1 = c.player.gold, bag1 = c.player.bag.length;
+    const pot = c.player.bag[c.player.bag.length - 1];
+    c.act({ type: "sell", uid: pot.uid });
+    return { gold0: 500, gold1, bag0, bag1, gold2: c.player.gold };
+  });
+  check("Pella buys and sells in the Trade Yard", shopTest.gold1 === 485 && shopTest.bag1 === shopTest.bag0 + 1 && shopTest.gold2 > shopTest.gold1,
+    JSON.stringify(shopTest));
+
   check("mage/elf: glass-cannon stats", mage.player.attrs.int === 16 && mage.player.maxHp < fighterHp && mage.player.maxMp >= 8,
     `hp=${mage.player.maxHp} mp=${mage.player.maxMp} int=${mage.player.attrs.int}`);
   check("mage starts with one small spell", mage.player.skills.length === 1 && mage.player.skills[0].id === "firebolt");

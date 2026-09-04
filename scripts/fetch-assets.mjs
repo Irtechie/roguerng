@@ -31,7 +31,8 @@ export const ICONS = [
   "delapouite/archer", "delapouite/miner", "lorc/portal", "delapouite/exit-door",
   "delapouite/3d-stairs", "delapouite/fencer", "delapouite/prayer-beads",
   "delapouite/character", "delapouite/elf-ear", "delapouite/dungeon-gate",
-  "lorc/campfire", "delapouite/torch", "delapouite/door"
+  "lorc/campfire", "delapouite/torch", "delapouite/door",
+  "delapouite/magic-potion", "lorc/fairy-wand"
 ];
 
 function get(url, redirects = 3) {
@@ -97,6 +98,10 @@ function noisePng(file, seed, base, spec) {
     let r = base[0], g = base[1], b = base[2];
     const n = (rnd() - 0.5) * spec.grain;
     r += n; g += n; b += n;
+    if (spec.grass && rnd() < spec.grass) { g += 26; r -= 6; b -= 12; }
+    if (spec.grass && rnd() < 0.02) { r += 22; g += 6; b -= 24; }
+    if (spec.plank && (y % 11 < 1)) { r *= 0.55; g *= 0.55; b *= 0.5; }
+    if (spec.plank && rnd() < 0.03) { r *= 0.8; g *= 0.8; b *= 0.8; }
     if (spec.cracks && rnd() < spec.cracks) { r *= 0.6; g *= 0.6; b *= 0.6; }
     if (spec.moss && rnd() < spec.moss) { g += 30; r -= 10; }
     if (spec.edge && ((x % 16 < 1) || (y % 16 < 1))) { r *= 0.7; g *= 0.7; b *= 0.7; }
@@ -109,14 +114,18 @@ function noisePng(file, seed, base, spec) {
 }
 
 const themes = {
-  town:      { floor: [52, 58, 46], wall: [74, 66, 54] },
+  // Town floor is sunlit grass, not dungeon stone; town walls are warm timber.
+  town:      { floor: [64, 92, 52], wall: [96, 72, 48] },
   greenhills:{ floor: [40, 56, 40], wall: [58, 66, 88] },
   darkfang:  { floor: [30, 34, 30], wall: [44, 40, 58] },
   ashfall:   { floor: [46, 36, 32], wall: [66, 42, 38] }
 };
 for (const [name, t] of Object.entries(themes)) {
-  noisePng(path.join(TEX_DIR, `floor-${name}.png`), name.length * 7 + 3, t.floor, { grain: 26, cracks: 0.02, edge: true });
-  noisePng(path.join(TEX_DIR, `wall-${name}.png`), name.length * 13 + 5, t.wall, { grain: 22, cracks: 0.04, edge: true, moss: name === "greenhills" ? 0.03 : 0 });
+  const isTown = name === "town";
+  noisePng(path.join(TEX_DIR, `floor-${name}.png`), name.length * 7 + 3, t.floor,
+    isTown ? { grain: 34, grass: 0.25, edge: false } : { grain: 26, cracks: 0.02, edge: true });
+  noisePng(path.join(TEX_DIR, `wall-${name}.png`), name.length * 13 + 5, t.wall,
+    isTown ? { grain: 18, plank: true, edge: true } : { grain: 22, cracks: 0.04, edge: true, moss: name === "greenhills" ? 0.03 : 0 });
 }
 console.log("textures painted:", Object.keys(themes).length * 2);
 console.log("DONE");
