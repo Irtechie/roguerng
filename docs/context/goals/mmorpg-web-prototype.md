@@ -82,3 +82,7 @@ collect-quest-items-and-return loop.
   seeded RNG); "enchantment" = any attached +/- modifier on equipment, races,
   or skills; 3 races to start (human/elf/dwarf); turn-based bump combat.
 - Earlier Pac-Man 3D demo archived under archive/pacman-demo/.
+- Repo: git initialized; canonical git copy at E:\roguerng, pushed to
+  https://github.com/Irtechie/roguerng (private, branch main, pushed as
+  DeaderestPool after accepting collab invite). OneDrive dir stays the live
+  working copy until we pick one home; sync with robocopy/git from there.
