@@ -89,6 +89,7 @@ function tileTexture(kind, theme) {
 let mapGroup = null;
 let loadedKey = null;
 let floorMesh, wallMesh, floorIndex, wallIndex, mapDims;
+let propMeshes = [];
 const explored = new Map();
 let visibleSet = new Set();
 
@@ -101,12 +102,18 @@ function buildMapMeshes(map) {
   scene.add(mapGroup);
   mapDims = { w: map.w, h: map.h };
 
-  const floors = [], walls = [];
+  const floors = [], walls = [], trees = [], rocks = [];
   for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
     const ch = map.grid[y][x];
     if (ch === "#") walls.push({ x, y });
+    else if (ch === "T") { trees.push({ x, y }); floors.push({ x, y }); }
+    else if (ch === "r") { rocks.push({ x, y }); floors.push({ x, y }); }
     else if (ch === ".") floors.push({ x, y });
   }
+  const outdoor = map.kind === "outdoor";
+  scene.fog.color.set(outdoor ? 0x7d9cc0 : 0x05060c);
+  scene.background.set(outdoor ? 0x8fb0d8 : 0x05060c);
+  moon.intensity = outdoor ? 1.4 : 0.6;
   floorIndex = new Map(); wallIndex = new Map();
   floors.forEach((f, i) => floorIndex.set(f.x + "," + f.y, i));
   walls.forEach((f, i) => wallIndex.set(f.x + "," + f.y, i));
@@ -132,6 +139,20 @@ function buildMapMeshes(map) {
     wallMesh.setMatrixAt(i, m);
   });
   mapGroup.add(wallMesh);
+
+  propMeshes = [];
+  const mkProp = (cells, geo, mat, z, scale = 1) => {
+    if (!cells.length) return;
+    const inst = new THREE.InstancedMesh(geo, mat, cells.length);
+    cells.forEach((f, i) => { m.makeScale(0.0001, 0.0001, 0.0001); m.setPosition(wx(f.x, map.w), wy(f.y, map.h), z); inst.setMatrixAt(i, m); });
+    inst.userData.cells = cells;
+    inst.userData.z = z;
+    mapGroup.add(inst);
+    propMeshes.push(inst);
+  };
+  mkProp(trees, new THREE.BoxGeometry(0.22, 0.22, 0.7), new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 1 }), 0.4);
+  mkProp(trees, new THREE.BoxGeometry(0.75, 0.75, 0.75), new THREE.MeshStandardMaterial({ color: 0x2e6b34, roughness: 1 }), 1.05);
+  mkProp(rocks, new THREE.BoxGeometry(0.55, 0.55, 0.4), new THREE.MeshStandardMaterial({ color: 0x6e6e76, roughness: 1 }), 0.25);
 
   if (map.stairs) {
     const stairsGroup = new THREE.Group();
@@ -183,6 +204,16 @@ function refreshFov() {
     wallMesh.setMatrixAt(i, m);
   }
   wallMesh.instanceMatrix.needsUpdate = true;
+  const m2 = new THREE.Matrix4();
+  for (const inst of propMeshes) {
+    inst.userData.cells.forEach((cell, i) => {
+      const on = exp.has(cell.x + "," + cell.y);
+      m2.makeScale(on ? 1 : 0.0001, on ? 1 : 0.0001, on ? 1 : 0.0001);
+      m2.setPosition(wx(cell.x, mapDims.w), wy(cell.y, mapDims.h), inst.userData.z);
+      inst.setMatrixAt(i, m2);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+  }
 }
 
 function losClear(x0, y0, x1, y1) {

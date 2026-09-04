@@ -5,9 +5,10 @@ import {
   RACES, CLASSES, SKILLS, SPELLBOOKS, WEAPONS, ARMORS, TRINKETS,
   BLESSINGS, CURSES, MONSTERS, BOSSES, MAPS, QUEST_ITEM_NAMES
 } from "./data.js";
-import { generateLayout, layoutArchetype, makeRng, hashStr } from "./gen.js";
+import { generateLayout, generateOutdoor, layoutArchetype, makeRng, hashStr } from "./gen.js";
 
 export const TOWN_KEY = "town";
+export const dungeonKey = (mapId, tier) => mapId + ":d" + tier;
 
 const TOWN_MAP = [
   "############################",
@@ -97,7 +98,23 @@ export class Core {
       map.entities.push({ uid: nextUid(), type: "portal", target: "ashfall", glyph: "A", color: "#ff6030", icon: "lorc__portal", x: 18, y: 9, name: "Ashfall Gate" });
       return map;
     }
-    const [mapId, tierStr] = key.split(":");
+    if (MAPS[key]) {
+      const def = MAPS[key];
+      const worldKey = (this.player ? this.player.worldSeed : 0) + ":" + key;
+      const { grid, floors, building } = generateOutdoor(worldKey);
+      const map = { key, kind: "outdoor", mapId: key, name: def.name, grid, floors,
+        entities: [], stairs: null, spawn: null, w: grid[0].length, h: grid.length };
+      map.spawn = floors[Math.floor(floors.length / 2)];
+      for (let best = Infinity, i = 0; i < floors.length; i++) {
+        const f = floors[i];
+        const d = Math.abs(f.x - 1) + Math.abs(f.y - (grid.length - 2));
+        if (d < best) { best = d; map.spawn = f; }
+      }
+      map.entities.push({ uid: nextUid(), type: "portal", target: "town", glyph: "X", color: "#ffd24d", icon: "delapouite__exit-door", x: map.spawn.x, y: map.spawn.y, name: "Road back to Merrow Vale" });
+      map.entities.push({ uid: nextUid(), type: "entrance", target: key, glyph: "!", color: "#ffb060", icon: "delapouite__door", x: building.door.x, y: building.door.y, name: def.name + " entrance" });
+      return map;
+    }
+    const [mapId, tierStr] = key.split(":d");
     const def = MAPS[mapId], tier = Number(tierStr);
     const worldKey = (this.player ? this.player.worldSeed : 0) + ":" + mapId;
     const arch = layoutArchetype(worldKey, tier);
@@ -112,7 +129,7 @@ export class Core {
       if (d > bestD) { bestD = d; stairs = f; }
     }
     map.stairs = stairs;
-    map.entities.push({ uid: nextUid(), type: "portal", target: "town", glyph: "X", color: "#ffd24d", icon: "delapouite__exit-door", x: map.spawn.x, y: map.spawn.y, name: "Return Gate" });
+    map.entities.push({ uid: nextUid(), type: "portal", target: mapId, glyph: "X", color: "#ffd24d", icon: "delapouite__exit-door", x: map.spawn.x, y: map.spawn.y, name: "Return to " + def.name });
 
     const occupied = new Set([map.spawn.x + "," + map.spawn.y]);
     const freeCell = () => {
@@ -225,7 +242,7 @@ export class Core {
     const map = this.getMap(this.player.mapKey);
     if (x < 0 || y < 0 || x >= map.w || y >= map.h) return true;
     const ch = map.grid[y][x];
-    return ch === "#" || ch === " ";
+    return ch === "#" || ch === " " || ch === "T" || ch === "r";
   }
 
   entityAt(x, y, mapKey) {
@@ -247,7 +264,12 @@ export class Core {
       if (here.type === "item") this.pickup(here);
       else if (here.type === "portal") {
         if (here.target === "town") this.doTravel("town");
-        else this.doTravel(here.target, 1);
+        else this.doTravel(here.target);
+        return true;
+      } else if (here.type === "entrance") {
+        const def = MAPS[here.target];
+        const t = Math.min(this.player.unlockedTiers[here.target] || 1, def.tiers);
+        this.doTravel(here.target, t);
         return true;
       }
     }
@@ -445,9 +467,16 @@ export class Core {
     const def = MAPS[target];
     if (!def) return;
     if (p.level < def.unlockLevel) { this.say(`${def.name} is sealed to you until level ${def.unlockLevel}.`, "#ff9090"); return; }
+    if (!tier) {
+      p.mapKey = target;
+      const out = this.getMap(target);
+      p.x = out.spawn.x; p.y = out.spawn.y;
+      this.say(`You step out into the ${def.name} outdoors. Find the entrance to delve deeper.`);
+      return;
+    }
     const maxUnlocked = p.unlockedTiers[target] || 1;
-    const t = Math.min(tier || 1, maxUnlocked);
-    p.mapKey = target + ":" + t;
+    const t = Math.min(tier, maxUnlocked);
+    p.mapKey = dungeonKey(target, t);
     const map = this.getMap(p.mapKey);
     p.x = map.spawn.x; p.y = map.spawn.y;
     this.say(`You enter ${def.name}, dungeon level ${t} (${map.tier === def.tiers ? "final depth" : "layout " + (map.arch + 1)}).`);
@@ -457,13 +486,13 @@ export class Core {
     const p = this.player;
     if (p.mapKey === TOWN_KEY) { this.say("No stairs here."); return; }
     const map = this.getMap(p.mapKey);
-    const [mapId, tStr] = p.mapKey.split(":");
+    const [mapId, tStr] = p.mapKey.split(":d");
     const tier = Number(tStr), def = MAPS[mapId];
     const onStairs = Math.abs(map.stairs.x - p.x) + Math.abs(map.stairs.y - p.y) <= 1;
     if (!onStairs) { this.say("You must stand on or beside the stairs (>)."); return; }
     if (tier >= def.tiers) { this.say("You have conquered every depth of this place.", "#ffd700"); return; }
     p.unlockedTiers[mapId] = Math.max(p.unlockedTiers[mapId] || 1, tier + 1);
-    p.mapKey = mapId + ":" + (tier + 1);
+    p.mapKey = dungeonKey(mapId, tier + 1);
     const next = this.getMap(p.mapKey);
     p.x = next.spawn.x; p.y = next.spawn.y;
     this.say(`You descend to ${def.name} depth ${tier + 1}. The air grows heavier.`, "#c0a0ff");
@@ -642,6 +671,7 @@ export class Core {
       if (e.type === "item") return { kind: "item", glyph: e.item.glyph, color: e.item.color, icon: e.item.icon, x: e.x, y: e.y, name: itemLabel(e.item) };
       if (e.type === "npc") return { kind: "npc", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "portal") return { kind: "portal", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
+      if (e.type === "entrance") return { kind: "entrance", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       return null;
     }).filter(Boolean);
     if (map.stairs) out.push({ kind: "stairs", glyph: ">", color: "#ffd76a", icon: "delapouite__3d-stairs", x: map.stairs.x, y: map.stairs.y, name: "Stairs down" });

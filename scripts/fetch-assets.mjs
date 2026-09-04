@@ -31,7 +31,7 @@ export const ICONS = [
   "delapouite/archer", "delapouite/miner", "lorc/portal", "delapouite/exit-door",
   "delapouite/3d-stairs", "delapouite/fencer", "delapouite/prayer-beads",
   "delapouite/character", "delapouite/elf-ear", "delapouite/dungeon-gate",
-  "lorc/campfire", "delapouite/torch"
+  "lorc/campfire", "delapouite/torch", "delapouite/door"
 ];
 
 function get(url, redirects = 3) {

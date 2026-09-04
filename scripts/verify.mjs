@@ -126,20 +126,32 @@ async function walkTo(page, tx, ty, limit = 300) {
     a.start("fighter", "human", "A"); b.start("fighter", "human", "B");
     return {
       seedsDiffer: a.player.worldSeed !== b.player.worldSeed,
-      gridsDiffer: a.getMap("greenhills:1").grid.join("") !== b.getMap("greenhills:1").grid.join("")
+      gridsDiffer: a.getMap("greenhills:d1").grid.join("") !== b.getMap("greenhills:d1").grid.join("")
     };
   });
   check("dungeons vary per character", perChar.seedsDiffer && perChar.gridsDiffer);
 
-  await page.evaluate(() => window.game.travel("greenhills", 1));
+  await page.evaluate(() => window.game.travel("greenhills"));
   s = await page.evaluate(() => window.game.status());
-  check("leaves town into village map", s.map.kind === "dungeon" && s.map.tier === 1 && s.map.name === "Greenhills Village");
+  check("leaves town into outdoor village map", s.map.kind === "outdoor" && s.map.name === "Greenhills Village");
+
+  const outWorld = await page.evaluate(() => {
+    const g = window.game;
+    const m = g.core.getMap("greenhills");
+    const ent = g.core.entities().find(e => e.kind === "entrance");
+    if (ent) for (let i = 0; i < 200 && Math.abs(g.status().player.x - ent.x) + Math.abs(g.status().player.y - ent.y) > 1; i++) g.stepTowards(ent.x, ent.y);
+    if (ent) g.stepTowards(ent.x, ent.y);
+    const s2 = g.status();
+    return { trees: (m.grid.join("").split("T").length - 1) > 20, hasEntrance: !!ent, enteredKind: s2.map.kind, enteredTier: s2.map.tier };
+  });
+  check("outdoors has trees and a physical entrance", outWorld.trees && outWorld.hasEntrance);
+  check("walking into the entrance starts the dungeon ladder", outWorld.enteredKind === "dungeon" && outWorld.enteredTier === 1);
 
   const sticky = await page.evaluate(() => {
     const g = window.game;
-    const before = g.core.getMap("greenhills:1").grid.join("");
+    const before = g.core.getMap("greenhills:d1").grid.join("");
     g.travel("town"); g.travel("greenhills", 1);
-    return g.core.getMap("greenhills:1").grid.join("") === before;
+    return g.core.getMap("greenhills:d1").grid.join("") === before;
   });
   check("dungeon layout sticks after first visit", sticky);
 
@@ -149,7 +161,7 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("stairs are a physical 3D structure", stairMesh);
 
-  const kinds = await page.evaluate(() => window.game.core.getMap("greenhills:9").monsterKinds);
+  const kinds = await page.evaluate(() => window.game.core.getMap("greenhills:d9").monsterKinds);
   check("dungeon spawns 3-4 monster kinds", kinds.length >= 3 && kinds.length <= 4, "kinds=" + kinds.join(","));
 
   await page.screenshot({ path: path.join(ROOT, "verify-shot-dungeon.png") });
@@ -229,13 +241,23 @@ async function walkTo(page, tx, ty, limit = 300) {
   const questCount = await page.evaluate(() => window.game.status().quests.length);
   check("three quest lines exist", questCount === 3, "quests=" + questCount);
 
+  const allOutdoors = await page.evaluate(() => {
+    const c = window.game.core;
+    c.player.level = 10;
+    for (const m of ["darkfang", "ashfall"]) c.act({ type: "travel", target: m });
+    const df = c.getMap("darkfang"), af = c.getMap("ashfall");
+    const hasEnt = mp => mp.entities.some(e => e.type === "entrance");
+    return df.kind === "outdoor" && af.kind === "outdoor" && hasEnt(df) && hasEnt(af);
+  });
+  check("Darkfang and Ashfall arrive outdoors with entrances", allOutdoors);
+
   const lootTiers = await page.evaluate(() => {
     const c = window.game.core;
     const avg = key => {
       const ms = c.getMap(key).entities.filter(e => e.type === "monster");
       return ms.reduce((s, m) => s + m.hp, 0) / Math.max(1, ms.length);
     };
-    const g1 = avg("greenhills:5"), d1 = avg("darkfang:5"), a1 = avg("ashfall:5");
+    const g1 = avg("greenhills:d5"), d1 = avg("darkfang:d5"), a1 = avg("ashfall:d5");
     return { g1, d1, a1 };
   });
   check("maps get harder (avg monster HP rises)", lootTiers.g1 < lootTiers.d1 && lootTiers.d1 < lootTiers.a1,
@@ -255,7 +277,7 @@ async function walkTo(page, tx, ty, limit = 300) {
     return {
       x: s.player.x, y: s.player.y, mapKey: s.map.key, xp: s.player.xp,
       bag: s.player.bag.length, kills: s.kills,
-      gridHash: g.core.getMap("greenhills:1").grid.join("").length,
+      gridHash: g.core.getMap("greenhills:d1").grid.join("").length,
       version: JSON.parse(localStorage.getItem("roguerng-save-v1")).version
     };
   });
@@ -270,7 +292,7 @@ async function walkTo(page, tx, ty, limit = 300) {
     return {
       x: s.player.x, y: s.player.y, mapKey: s.map.key, xp: s.player.xp,
       bag: s.player.bag.length, kills: s.kills,
-      gridHash: window.game.core.getMap("greenhills:1").grid.join("").length
+      gridHash: window.game.core.getMap("greenhills:d1").grid.join("").length
     };
   });
   check("Continue restores hero and sticky dungeons",

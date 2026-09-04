@@ -174,6 +174,51 @@ const LAYOUTS = [
 
 export const LAYOUT_NAMES = ["rooms", "rings", "caverns", "chessboard", "serpent", "gardens", "arena"];
 
+export function generateOutdoor(worldKey) {
+  const rng = makeRng(hashStr(worldKey + ":out"));
+  const g = blank(".");
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+    if (x === 0 || y === 0 || x === W - 1 || y === H - 1) g[y][x] = "#";
+  // tree and rock scatter in clumps
+  for (let n = 0; n < 14; n++) {
+    const cx = 3 + Math.floor(rng() * (W - 6)), cy = 3 + Math.floor(rng() * (H - 6));
+    const ch = rng() < 0.72 ? "T" : "r";
+    for (let i = 0; i < 4 + Math.floor(rng() * 6); i++) {
+      const x = cx + Math.floor(rng() * 5) - 2, y = cy + Math.floor(rng() * 4) - 2;
+      if (inb(x, y)) g[y][x] = ch;
+    }
+  }
+  // cellar building with a door cell
+  const bx = 14 + Math.floor(rng() * 8), by = 6 + Math.floor(rng() * 6);
+  for (let y = by; y < by + 5; y++) for (let x = bx; x < bx + 7; x++)
+    if (inb(x, y)) g[y][x] = "#";
+  for (let y = by + 1; y < by + 4; y++) for (let x = bx + 1; x < bx + 6; x++) g[y][x] = ".";
+  const door = { x: bx + 3, y: by + 4 };
+  g[door.y][door.x] = ".";
+  // open approach apron in front of the door
+  for (let y = door.y + 1; y < Math.min(H - 1, door.y + 5); y++)
+    for (let x = door.x - 2; x <= door.x + 2; x++) if (inb(x, y)) g[y][x] = ".";
+  const floors = [];
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (g[y][x] === ".") floors.push({ x, y });
+  const region = largestRegionFrom(g, door.x, door.y);
+  return { grid: g.map(r => r.join("")), floors: region || floors, building: { x: bx, y: by, w: 7, h: 5, door } };
+}
+
+function largestRegionFrom(g, sx, sy) {
+  const seen = new Set();
+  const stack = [[sx, sy]], region = [];
+  seen.add(sx + "," + sy);
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    if (g[cy][cx] === ".") region.push({ x: cx, y: cy });
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy, k = nx + "," + ny;
+      if (inb(nx, ny) && g[ny][nx] === "." && !seen.has(k)) { seen.add(k); stack.push([nx, ny]); }
+    }
+  }
+  return region;
+}
+
 export function generateLayout(mapId, tier, archetype) {
   const rng = makeRng(hashStr(mapId + ":" + tier + ":" + archetype));
   return LAYOUTS[archetype % LAYOUTS.length](rng);
