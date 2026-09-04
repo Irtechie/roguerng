@@ -287,6 +287,7 @@ export class Core {
       case "descend": this.doDescend(); break;
       case "ascend": this.doAscend(); break;
       case "identify": this.doIdentify(action.uid); break;
+      case "identService": this.doIdentService(action.uid); break;
       case "buy": this.doBuy(action.key); break;
       case "sell": this.doSell(action.uid); break;
       case "equip": this.doEquip(action.uid); break;
@@ -753,10 +754,10 @@ export class Core {
     else if (key === "key") item = makeKey();
     else if (type === "weapon") {
       const w = WEAPONS.find(x => x.id === id);
-      item = { uid: nextUid(), kind: "weapon", slot: "weapon", id: w.id, name: w.name, dmg: w.dmg, glyph: "/", color: "#d0d0e0", icon: w.icon, affixes: [], cursed: false, ident: true };
+      item = { uid: nextUid(), kind: "weapon", slot: "weapon", id: w.id, name: w.name, dmg: w.dmg, tier: w.tier, glyph: "/", color: "#d0d0e0", icon: w.icon, affixes: [], cursed: false, ident: true };
     } else if (type === "armor") {
       const a = ARMORS.find(x => x.id === id);
-      item = { uid: nextUid(), kind: "armor", slot: "armor", id: a.id, name: a.name, def: a.def, glyph: "[", color: "#c0a070", icon: a.icon, affixes: [], cursed: false, ident: true };
+      item = { uid: nextUid(), kind: "armor", slot: "armor", id: a.id, name: a.name, def: a.def, tier: a.tier, glyph: "[", color: "#c0a070", icon: a.icon, affixes: [], cursed: false, ident: true };
     } else if (type === "book") {
       const b = SPELLBOOKS[id];
       item = { uid: nextUid(), kind: "book", bookId: id, name: b.name, glyph: b.glyph, color: b.color, icon: b.icon, reqLevel: b.reqLevel, ident: true };
@@ -777,19 +778,29 @@ export class Core {
     }
     const it = p.bag[idx];
     if (it.quest) { this.say("That belongs to a village, not a coin purse."); return false; }
-    let price = 4;
-    if (it.kind === "potion") price = it.effect === "mana" ? 10 : 8;
-    else if (it.kind === "key") price = 12;
-    else if (it.kind === "scroll-identify") price = 15;
-    else if (it.kind === "book") price = 40;
-    else if (["weapon", "armor", "trinket"].includes(it.kind)) {
-      price = 10 + (it.dmg || it.def || 0) * 8 + it.affixes.filter(a => a.value > 0).length * 6;
-      if (it.ident === false) price = Math.round(price * 0.35);
-      else if (it.cursed) price = Math.round(price * 0.5);
-    }
+    const price = sellPrice(it);
     p.bag.splice(idx, 1);
     p.gold += price;
-    this.say(`${vendor.name} counts out ${price} gold for the ${itemLabel(it)}.`, "#ffd76a");
+    const note = it.kind !== "weapon" && it.kind !== "armor" && it.kind !== "trinket" ? "" :
+      it.ident === false ? " (unidentified - a scrap)" : it.cursed ? " (cursed - below its worth)" : "";
+    this.say(`${vendor.name} counts out ${price} gold for the ${itemLabel(it)}${note}.`, "#ffd76a");
+    return true;
+  }
+
+  doIdentService(uid) {
+    const p = this.player;
+    const it = p.bag.find(i => i.uid === uid);
+    if (!it || !["weapon", "armor", "trinket"].includes(it.kind) || it.ident !== false) {
+      this.say("Identify what? Pick an unidentified item from your pack."); return false;
+    }
+    const vendor = this.nearbyVendor();
+    if (!vendor) { this.say("Only a town merchant can appraise your goods."); return false; }
+    if (p.gold < IDENT_SERVICE_PRICE) {
+      this.say(`${vendor.name}: 'Identification costs ${IDENT_SERVICE_PRICE} gold up front.'`); return false;
+    }
+    p.gold -= IDENT_SERVICE_PRICE;
+    it.ident = true;
+    this.say(`${vendor.name} weighs it in hand... It is ${itemLabel(it)}. -${IDENT_SERVICE_PRICE}g.`, "#7ddfff");
     return true;
   }
 
@@ -1100,9 +1111,9 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
 
   const glyphs = { weapon: "/", armor: "[", trinket: "'" }, colors = { weapon: "#d0d0e0", armor: "#c0a070", trinket: "#e0c060" };
   const item = {
-    uid: nextUid(), kind, slot: kind, id: base.id, name: base.name, dmg: base.dmg, def: base.def,
+    uid: nextUid(), kind, slot: kind, id: base.id, name: base.name, dmg: base.dmg, def: base.def, tier: base.tier,
     glyph: glyphs[kind], color: colors[kind], icon: base.icon || null, affixes: [], cursed: false,
-    ident: forceBlessed || rng() < 0.15
+    ident: forceBlessed || rng() < 0.2
   };
   const cursed = !forceBlessed && rng() < 0.2;
   if (cursed) {
@@ -1125,6 +1136,33 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
   return item;
 }
 
+export function itemWorth(it) {
+  const affixSum = (it.affixes || []).reduce((s, a) => s + a.value, 0);
+  const t = it.tier || 1;
+  switch (it.kind) {
+    case "potion": return it.effect === "mana" ? 20 : 15;
+    case "key": return 25;
+    case "scroll-identify": return 30;
+    case "book": return 120 + (it.reqLevel || 1) * 20;
+    case "weapon": return Math.max(8, Math.round(20 + it.dmg * it.dmg * 4 + t * 10 + affixSum * 10));
+    case "armor": return Math.max(8, Math.round(25 + it.def * it.def * 6 + t * 12 + affixSum * 12));
+    case "trinket": return Math.max(10, Math.round(15 + t * t * 6 + affixSum * 12));
+    default: return 5;
+  }
+}
+
+export function sellPrice(it) {
+  const w = itemWorth(it);
+  if (["weapon", "armor", "trinket"].includes(it.kind)) {
+    if (it.ident === false) return Math.max(1, Math.round(w * 0.2));
+    if (it.cursed) return Math.max(1, Math.round(w * 0.35));
+    return Math.max(2, Math.round(w * 0.5));
+  }
+  return Math.max(1, Math.round(w * 0.5));
+}
+
+export const IDENT_SERVICE_PRICE = 25;
+
 export function itemLabel(it) {
   if (!it) return "";
   if (it.ident === false) return `Unidentified ${it.name}?`;
@@ -1135,7 +1173,7 @@ export function itemLabel(it) {
 
 function labelOrNull(it) { return it ? itemLabel(it) : null; }
 function describeItem(it) {
-  return { uid: it.uid, label: itemLabel(it), kind: it.kind, color: it.color, glyph: it.glyph, icon: it.icon || null, reqLevel: it.reqLevel || null, ident: it.ident !== false };
+  return { uid: it.uid, label: itemLabel(it), kind: it.kind, color: it.color, glyph: it.glyph, icon: it.icon || null, reqLevel: it.reqLevel || null, ident: it.ident !== false, sell: it.quest ? 0 : sellPrice(it) };
 }
 
 function rand1to(rng, n) { return 1 + Math.floor(rng() * Math.max(1, n)); }

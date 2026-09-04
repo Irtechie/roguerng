@@ -8,7 +8,7 @@ import { EffectComposer } from "../vendor/examples/jsm/postprocessing/EffectComp
 import { RenderPass } from "../vendor/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "../vendor/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "../vendor/examples/jsm/postprocessing/OutputPass.js";
-import { Core } from "./core.js";
+import { Core, sellPrice } from "./core.js";
 import { RACES, CLASSES, SHOP, VENDORS } from "./data.js";
 
 const urlSeed = new URLSearchParams(location.search).get("seed");
@@ -1022,7 +1022,7 @@ function renderInventory(s) {
     if (["weapon", "armor", "trinket"].includes(it.kind) && it.ident === false)
       btn += ` <button data-act="identify" data-uid="${it.uid}">Identify</button>`;
     btn += ` <button data-act="drop" data-uid="${it.uid}">Drop</button>`;
-    if (shopOpen) btn += ` <button data-act="sell" data-uid="${it.uid}">Sell</button>`;
+    if (shopOpen && it.sell > 0) btn += ` <button data-act="sell" data-uid="${it.uid}">Sell ${it.sell}g</button>`;
     const ic = it.icon ? `<img src="assets/img/${it.icon}.png" class="ic" style="filter: invert(1);">` : it.glyph;
     return `<div class="row" style="color:${it.color}">${ic} ${it.label} ${btn}</div>`;
   }).join("") || "<div class='row'>empty</div>";
@@ -1032,14 +1032,40 @@ function renderShop() {
   if (sh.style.display !== "block") return;
   const vendor = core.nearbyVendor();
   if (!vendor) return;
+  const hasUnident = core.player.bag.some(i => ["weapon", "armor", "trinket"].includes(i.kind) && i.ident === false);
   sh.innerHTML = `<h3>${VENDORS[vendor.npcId].name}</h3>` + SHOP.filter(g => g.vendor === vendor.npcId).map(g =>
     `<div class="row" style="color:#e8d090">${g.name} — ${g.price}g <button data-act="buy" data-key="${g.key}">Buy</button></div>`).join("") +
-    `<div class="row" style="color:#889">Sell from your Pack (I) — unidentified goods fetch a scrap.</div>`;
+    (hasUnident ? `<div class="row" style="color:#7ddfff">Identify an item — 25g <button data-act="ident">Choose</button></div>` : "") +
+    `<div class="row" style="color:#889">Sell from your Pack (I) — sell prices are half of a known item's worth; unidentified fetches two-tenths.</div>`;
 }
+const unidentifiedGear = () =>
+  core.player.bag.filter(i => ["weapon", "armor", "trinket"].includes(i.kind) && i.ident === false);
+function openIdentPicker(mode) {
+  const cands = unidentifiedGear();
+  if (!cands.length) { core.say("Nothing unidentified in your pack.", "#c0a0a0"); renderLog(); return false; }
+  const pEl = el("picker");
+  pEl.innerHTML = "<h3>Identify which?</h3>" + cands.map(it => {
+    const ic = it.icon ? `<img src="assets/img/${it.icon}.png" class="ic" style="filter: invert(1);">` : it.glyph;
+    return `<div class="row" style="color:${it.color}">${ic} ${it.label} <button data-pick="${it.uid}">${mode === "gold" ? "Identify (25g)" : "Identify"}</button></div>`;
+  }).join("") + `<div class="row"><button data-pick="">Never mind</button></div>`;
+  pEl.dataset.mode = mode;
+  pEl.style.display = "block";
+  return true;
+}
+el("picker").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const mode = el("picker").dataset.mode;
+  el("picker").style.display = "none";
+  if (!b.dataset.pick) { afterAction(); return; }
+  core.act({ type: mode === "gold" ? "identService" : "identify", uid: Number(b.dataset.pick) });
+  afterAction();
+});
 el("shop").addEventListener("click", e => {
   const b = e.target.closest("button");
   if (!b) return;
   if (b.dataset.act === "buy") core.act({ type: "buy", key: b.dataset.key });
+  else if (b.dataset.act === "ident") openIdentPicker("gold");
   afterAction();
 });
 el("inv").addEventListener("click", e => {
@@ -1050,6 +1076,8 @@ el("inv").addEventListener("click", e => {
   else if (b.dataset.act === "drop") core.act({ type: "drop", uid });
   else if (b.dataset.act === "sell") core.act({ type: "sell", uid });
   else if (b.dataset.act === "identify") core.act({ type: "identify", uid });
+  else if (b.dataset.act === "use" && core.player.bag.find(i => i.uid === uid && i.kind === "scroll-identify")
+    && unidentifiedGear().length > 1) openIdentPicker("free");
   else core.act({ type: "useItem", uid });
   afterAction();
 });
@@ -1237,7 +1265,12 @@ window.addEventListener("keydown", e => {
     mmCanvas.style.display = mapOpen ? "block" : "none";
     drawMinimap();
   }
-  else if (/^[1-6]$/.test(e.key)) { core.act({ type: "skill", slot: Number(e.key) - 1 }); afterAction(); }
+  else if (/^[1-6]$/.test(e.key)) {
+    const slot = Number(e.key) - 1;
+    if (core.player?.skills[slot] === "identify" && unidentifiedGear().length > 1) openIdentPicker("free");
+    else core.act({ type: "skill", slot });
+    afterAction();
+  }
 });
 
 // ---------- render loop ----------
@@ -1328,6 +1361,9 @@ window.game = {
     return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
   },
   debugModels: () => ({ ...modelStatus }),
+  sellPriceFor: it => sellPrice(it),
+  openIdentPicker: mode => openIdentPicker(mode || "free"),
+  pickerOpen: () => el("picker").style.display === "block",
   heroForward: () => {
     const root = playerSprite?.userData.modelRoot;
     if (!root) return null;

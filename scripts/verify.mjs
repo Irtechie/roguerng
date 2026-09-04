@@ -345,8 +345,8 @@ async function walkTo(page, tx, ty, limit = 300) {
     }
     return { eq, known, rate: known / Math.max(1, eq) };
   });
-  check("found gear usually starts unidentified (~15% known)",
-    identStat.eq > 150 && identStat.rate > 0.05 && identStat.rate < 0.3, JSON.stringify(identStat));
+  check("found gear usually starts unidentified (~20% known)",
+    identStat.eq > 150 && identStat.rate > 0.1 && identStat.rate < 0.33, JSON.stringify(identStat));
 
   const identTest = await page.evaluate(() => {
     const g = window.game, c = g.core;
@@ -715,6 +715,73 @@ async function walkTo(page, tx, ty, limit = 300) {
     return { ok: dot > 0.7, step, fwd, dot: +dot.toFixed(2) };
   });
   check("GLB hero actually walks facing its movement direction", facingWorld.ok, JSON.stringify(facingWorld));
+
+  const pickerTest = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    g.create("fighter", "human", "Picks");
+    const mk = uid => ({ uid, kind: "weapon", slot: "weapon", id: "dagger", name: "Dagger", dmg: 3, tier: 1, glyph: "/", color: "#ccc", affixes: [], cursed: false, ident: false });
+    c.player.bag.push(mk(900001), mk(900002), mk(900003));
+    c.player.bag.push({ uid: 900010, kind: "scroll-identify", name: "Scroll of Identify", glyph: "?", color: "#ccc" });
+    const opened = g.openIdentPicker("free");
+    const rows = [900001, 900002, 900003].every(u => !!document.querySelector(`#picker button[data-pick="${u}"]`));
+    const visible = g.pickerOpen();
+    document.querySelector('#picker button[data-pick="900002"]').click();
+    await new Promise(r => requestAnimationFrame(r));
+    const idents = [900001, 900002, 900003].map(u => !!c.player.bag.find(i => i.uid === u && i.ident));
+    return { opened, visible, rows, idents, scrollGone: !c.player.bag.some(i => i.kind === "scroll-identify"), closed: !g.pickerOpen() };
+  });
+  check("identify asks which item; only the picked one is revealed",
+    pickerTest.opened && pickerTest.visible && pickerTest.rows === true &&
+    pickerTest.idents[1] && !pickerTest.idents[0] && !pickerTest.idents[2] && pickerTest.scrollGone && pickerTest.closed,
+    JSON.stringify(pickerTest));
+
+  const identService = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    const mk = uid => ({ uid, kind: "weapon", slot: "weapon", id: "dagger", name: "Dagger", dmg: 3, tier: 1, glyph: "/", color: "#ccc", affixes: [], cursed: false, ident: false });
+    g.travel("greenhills", 1);
+    c.player.bag.push(mk(900020)); c.player.gold = 100;
+    c.act({ type: "identService", uid: 900020 });
+    const outsideRefused = c.player.bag.find(i => i.uid === 900020).ident === false && c.player.gold === 100;
+    g.travel("town");
+    const map = c.getMap("town");
+    const npc = map.entities.find(e => e.type === "npc" && e.npcId === "merchant");
+    let spot = null;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (map.grid[npc.y + dy][npc.x + dx] === ".") { spot = { x: npc.x + dx, y: npc.y + dy }; break; }
+    c.player.x = spot.x; c.player.y = spot.y;
+    c.player.bag.push(mk(900021));
+    c.act({ type: "identService", uid: 900021 });
+    const it = c.player.bag.find(i => i.uid === 900021);
+    return { outsideRefused, identified: it.ident === true, goldPaid: c.player.gold === 75 };
+  });
+  check("town merchants identify gear for 25 gold (and nowhere else)",
+    identService.outsideRefused && identService.identified && identService.goldPaid, JSON.stringify(identService));
+
+  const pricing = await page.evaluate(async () => {
+    const d = await import("/src/data.js");
+    const g = window.game;
+    const wpn = (dmg, tier, aff = []) => ({ kind: "weapon", dmg, tier, affixes: aff, ident: true });
+    const w1 = g.sellPriceFor(wpn(3, 1));
+    const w2 = g.sellPriceFor(wpn(12, 10, [{ value: 3 }]));
+    const knownSame = g.sellPriceFor(wpn(12, 10));
+    const unk = g.sellPriceFor({ ...wpn(12, 10), ident: false });
+    let worst = Infinity;
+    for (const e of d.SHOP) {
+      const [type, id] = e.key.split(":");
+      let it;
+      if (e.key === "potion") it = { kind: "potion" };
+      else if (e.key === "potion-mana") it = { kind: "potion", effect: "mana" };
+      else if (e.key === "scroll-identify") it = { kind: "scroll-identify" };
+      else if (e.key === "key") it = { kind: "key" };
+      else if (type === "weapon") { const w = d.WEAPONS.find(x => x.id === id); it = { kind: "weapon", dmg: w.dmg, tier: w.tier, affixes: [], ident: true }; }
+      else if (type === "armor") { const a = d.ARMORS.find(x => x.id === id); it = { kind: "armor", def: a.def, tier: a.tier, affixes: [], ident: true }; }
+      else { const b = d.SPELLBOOKS[id]; it = { kind: "book", reqLevel: b.reqLevel }; }
+      worst = Math.min(worst, e.price - g.sellPriceFor(it));
+    }
+    return { w1, w2, knownSame, unk, unkRatio: unk / knownSame, worst };
+  });
+  check("sell prices scale with quality; unidentified ~2/5 of identified; no buy/sell arbitrage",
+    pricing.w2 > pricing.w1 * 4 && Math.abs(pricing.unkRatio - 0.4) < 0.03 && pricing.worst >= 1,
+    JSON.stringify(pricing));
 
   check("no page errors during full loop", errors.length === 0, errors.join(" | ").slice(0, 300));
 

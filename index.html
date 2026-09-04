@@ -33,6 +33,10 @@
   #shop { position: absolute; left: 10px; top: 110px; width: 250px; display: none; background: rgba(10,10,20,0.92); border: 1px solid #554; padding: 8px; z-index: 6; font-size: 12px; }
   #shop h3 { margin: 0 0 6px; color: #ffd76a; font-size: 13px; }
   #shop button, #inv button { margin-left: 4px; font: inherit; font-size: 10px; background: #22305a; color: #cfe; border: 1px solid #446; border-radius: 3px; cursor: pointer; }
+  #picker { top: 15%; left: 50%; transform: translateX(-50%); width: 320px; z-index: 7; background: rgba(10,12,22,0.95); border: 1px solid #446; }
+  #picker h3 { margin: 0 0 6px; color: #7ddfff; font-size: 13px; }
+  #picker .row { margin: 3px 0; }
+  #picker button { margin-left: 4px; font: inherit; font-size: 10px; background: #22305a; color: #cfe; border: 1px solid #446; border-radius: 3px; cursor: pointer; }
   #create, #death {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     background: rgba(3,4,10,0.92); z-index: 10; flex-direction: column;
@@ -64,7 +68,8 @@
   <div id="skills" class="panel" style="display:none"></div>
   <div id="log" class="panel"></div>
   <div id="inv" class="panel"></div>
-  <div id="help" class="panel">WASD move &bull; 1-6 skills &bull; E talk/open &bull; &gt; descend &bull; &lt; climb up &bull; I pack &bull; M map &bull; click to walk/use &bull; keys open chests/doors by walking into them &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
+  <div id="picker" class="panel"></div>
+  <div id="help" class="panel">WASD move &bull; 1-6 skills &bull; E talk/open &bull; &gt; descend &bull; &lt; climb up &bull; I pack &bull; M map &bull; click to walk/use &bull; keys open chests/doors by walking into them &bull; merchants identify gear for 25g &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
 
   <div id="create">
     <div class="box">
