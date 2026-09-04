@@ -3,6 +3,10 @@
 import * as THREE from "three";
 import { GLTFLoader } from "../vendor/GLTFLoader.js";
 import { GLTFExporter } from "../vendor/GLTFExporter.js";
+import { EffectComposer } from "../vendor/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "../vendor/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "../vendor/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "../vendor/examples/jsm/postprocessing/OutputPass.js";
 import { Core } from "./core.js";
 import { RACES, CLASSES, SHOP, VENDORS } from "./data.js";
 
@@ -40,9 +44,17 @@ const moonTarget = new THREE.Object3D();
 scene.add(moonTarget);
 moon.target = moonTarget;
 
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.6, 0.82);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
+composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
+  composer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -1136,7 +1148,7 @@ function loop() {
     if (f.isPointLight) f.intensity = 9 + 3 * Math.sin(tsec * 9 + f.position.x * 3) + 2 * Math.sin(tsec * 17 + f.position.y);
     else f.scale.setScalar(0.85 + 0.3 * Math.sin(tsec * 9 + f.position.x * 3));
   }
-  renderer.render(scene, camera);
+  composer.render();
   const now = performance.now();
   if (mapOpen && now - mmLast > 250) { mmLast = now; drawMinimap(); }
 }
@@ -1156,6 +1168,17 @@ window.game = {
   descend: () => { core.act({ type: "descend" }); afterAction(); },
   ascend: () => { core.act({ type: "ascend" }); afterAction(); },
   heroAngle: () => playerSprite ? playerSprite.rotation.z : null,
+  setBloom: s => { bloomPass.strength = s; return bloomPass.strength; },
+  debugPost: () => ({
+    rtType: composer.renderTarget1.texture.type,
+    rtFilter: composer.renderTarget1.texture.magFilter,
+    bloomRes: [bloomPass.resolution.x, bloomPass.resolution.y],
+    strength: bloomPass.strength, threshold: bloomPass.threshold,
+    gl2: renderer.capabilities.isWebGL2,
+    dpr: renderer.getPixelRatio(),
+    passes: composer.passes.map(p => p.constructor.name),
+    halfFloat: !!renderer.extensions.has("EXT_color_buffer_float")
+  }),
   interact: () => { core.act({ type: "interact" }); afterAction(); },
   stepTowards: (x, y) => { const r = core.stepTowards(x, y); afterAction(); return r; },
   monsters: () => core.monstersNear(),
