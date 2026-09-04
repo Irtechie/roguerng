@@ -164,6 +164,11 @@ let visibleSet = new Set();
 
 function wx(x, w) { return x - w / 2; }
 function wy(y, h) { return -(y - h / 2); }
+// Facing yaw for a Z-up sprite whose forward is +Y. World Y is mirrored by wy(),
+// so the world move is (dx,-dy). Written as 0-dx/0-dy (not -dx/-dy) to avoid a
+// negative-zero (-0) second arg on pure left/right steps, which makes atan2 snap
+// E and W both to a backwards 180 deg.
+function facingYaw(dx, dy) { return Math.atan2(0 - dx, 0 - dy); }
 
 function buildMapMeshes(map) {
   if (mapGroup) scene.remove(mapGroup);
@@ -945,7 +950,7 @@ function rebuildEntities() {
     bar.visible = e.hp < e.maxHp;
     bar.scale.x = Math.max(0.05, e.hp / e.maxHp);
     if (e.facing) {
-      const target = Math.atan2(-e.facing.dx, -e.facing.dy);
+      const target = facingYaw(e.facing.dx, e.facing.dy);
       let d = target - g.rotation.z;
       d = Math.atan2(Math.sin(d), Math.cos(d));
       g.rotation.z += d * 0.3;
@@ -967,7 +972,7 @@ function rebuildEntities() {
     playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color);
     playerSprite.userData.voxel = true;
     const pf0 = core.player.facing || { dx: 1, dy: 0 };
-    playerSprite.rotation.z = Math.atan2(-pf0.dx, -pf0.dy);
+    playerSprite.rotation.z = facingYaw(pf0.dx, pf0.dy);
     scene.add(playerSprite);
   }
   const ppx = wx(core.player.x, mapDims.w), ppy = wy(core.player.y, mapDims.h);
@@ -976,7 +981,7 @@ function rebuildEntities() {
   playerSprite.position.set(ppx, ppy, 0);
   playerSprite.userData.setMoving?.(t < (playerSprite.userData.moveUntil || 0));
   const pf = core.player.facing || { dx: 1, dy: 0 };
-  const pTarget = Math.atan2(-pf.dx, -pf.dy);
+  const pTarget = facingYaw(pf.dx, pf.dy);
   let pd = pTarget - playerSprite.rotation.z;
   pd = Math.atan2(Math.sin(pd), Math.cos(pd));
   playerSprite.rotation.z += pd * 0.55;
@@ -1377,16 +1382,24 @@ window.game = {
     const g = makeVoxel(id, "", "#888888");
     return { model: g.userData.model || null, animated: !!g.userData.mixer };
   },
+  heroBoneNames: () => {
+    const root = playerSprite?.userData.modelRoot;
+    if (!root) return null;
+    const names = [];
+    root.traverse(o => { if (/toe|foot|hand|wrist|head|chest|hips|nose|eye|shoulder/i.test(o.name)) names.push(o.name); });
+    return names;
+  },
   heroBones: () => {
     const root = playerSprite?.userData.modelRoot;
     if (!root) return null;
     playerSprite.updateWorldMatrix(true, true);
-    const out = {};
-    for (const n of ["head", "chest", "toes.l", "foot.l", "hips"]) {
-      const b = root.getObjectByName(n);
-      if (b) out[n] = [b.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2))][0];
-    }
-    return out;
+    const want = ["head", "chest", "toes.l", "foot.l", "hips", "handslot.r", "handslot.l"];
+    const norm = s => (s || "").replace(/[._]/g, "").toLowerCase();
+    const labelFor = {};
+    for (const w of want) labelFor[norm(w)] = w;
+    const pos = {};
+    root.traverse(o => { const k = norm(o.name); if (k in labelFor && !(labelFor[k] in pos)) pos[labelFor[k]] = o.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)); });
+    return pos;
   },
   debugSceneModels: () => {
     const names = [];

@@ -710,10 +710,14 @@ async function walkTo(page, tx, ty, limit = 300) {
       if (c.blocked(c.player.x + step[0], c.player.y + step[1])) continue;
       c.act({ type: "move", dx: step[0], dy: step[1] });
       for (let i = 0; i < 20; i++) await new Promise(r => requestAnimationFrame(r));
-      const fwd = g.heroForward();
-      if (!fwd) return { ok: false, reason: "no model root (hero not a GLB?)" };
+      const b = g.heroBones();
+      if (!b || !b.chest) return { ok: false, reason: "no hero bones (hero not a GLB?)" };
       const ex = step[0], ey = -step[1];
-      const dot = fwd.x * ex + fwd.y * ey;
+      const norm = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+      let handDot = 0, toeDot = 0;
+      if (b["handslot.r"]) { const [fx, fy] = norm(-(b["handslot.r"][1] - b.chest[1]), b["handslot.r"][0] - b.chest[0]); handDot = fx * ex + fy * ey; }
+      if (b["toes.l"] && b["foot.l"]) { const [fx, fy] = norm(b["toes.l"][0] - b["foot.l"][0], b["toes.l"][1] - b["foot.l"][1]); toeDot = fx * ex + fy * ey; }
+      const dot = Math.max(handDot, toeDot);
       results.push({ step, dot: +dot.toFixed(2) });
     }
     const hasX = results.some(r => r.step[1] === 0);
