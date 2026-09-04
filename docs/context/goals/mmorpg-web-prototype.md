@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-09-03
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 ## Objective
 
@@ -52,15 +52,17 @@ collect-quest-items-and-return loop.
 
 ## Current State
 
-- Current artifact: working prototype (index.html, src/data.js, src/gen.js, src/core.js, src/game.js)
+- Current artifact: working prototype (index.html, src/data.js, src/gen.js, src/core.js, src/game.js), canonical copy E:\roguerng, pushed to main through 145d05c.
 - Next allowed action: human eye check of rogue-style look (play: `node scripts/serve.mjs`), then mark complete or request changes
-- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (36/36) 2026-09-04:
-  big-uptick manifest 2026-09-03-001 COMPLETE - per-character sticky seeds,
-  localStorage save/Continue/autosave (v1), outdoors village maps with tree/rock
-  props + physical entrances into the dungeon ladder (all 3 maps), physical 3D
-  stair structure + torch glow, out-of-combat HP regen + no mana trickle + cast
-  fumble cooldown, voxel Minecraft-style bodies with class gear, and a proven
-  GLB export/import round-trip (vendored three GLTF stack) ready for CC0 packs.
+- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (62/62) 2026-09-04:
+  playability + content batches - species-shaped voxel monsters + 6 new species,
+  two-way stairs (< ascend, cameFrom routing, no portal-eject), face movement
+  direction, manual saves, town-only regen, M minimap, click-to-walk/use, item
+  drop, 12-tier ladders with bosses, ~15% identify chance + mage Identify spell +
+  scrolls, 6 classes (Fighter/Mage/Cleric/Thief/Paladin/Ranger) with weapon/armor
+  restrictions + per-class spell lists, vendor shops (Pella/Dorin/Ianna) incl.
+  selling, chests + iron keys + locked strongroom doors, mana potions, and a town
+  that reads as a town (roofed houses, lit windows/lanterns, market stalls, grass).
 - Added since U1: 54 free CC-BY game-icons (assets/, ATTRIBUTION.md), procedural tile
   textures, 3rd map Ashfall Mine (Lv8, x2.1 difficulty, loot+8), Ember Imp/Magma Slab
   monsters, Cinder Golem boss, Foreman Halla quest, screenshots in shots/
@@ -87,7 +89,8 @@ collect-quest-items-and-return loop.
   seeded RNG); "enchantment" = any attached +/- modifier on equipment, races,
   or skills; 3 races to start (human/elf/dwarf); turn-based bump combat.
 - Earlier Pac-Man 3D demo archived under archive/pacman-demo/.
-- Repo: git initialized; canonical git copy at E:\roguerng, pushed to
-  https://github.com/Irtechie/roguerng (private, branch main, pushed as
-  DeaderestPool after accepting collab invite). OneDrive dir stays the live
-  working copy until we pick one home; sync with robocopy/git from there.
+- Repo: git initialized; canonical working copy at E:\roguerng (user directive
+  2026-09-04), pushed to https://github.com/Irtechie/roguerng (private, branch
+  main, direct-push delivery, pushed as DeaderestPool). The OneDrive folder is a
+  passive/stale mirror only - do not develop there (it silently rolled back
+  src/game.js once).
