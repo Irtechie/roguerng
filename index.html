@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RogueMS - Merrow Vale</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05060c; color: #c8c8d8; font-family: "Courier New", monospace; overflow: hidden; }
+  #scene { position: fixed; inset: 0; }
+  .panel { position: fixed; background: rgba(8,10,20,0.82); border: 1px solid #2a3050; border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+  #stats { top: 10px; left: 10px; width: 380px; }
+  #stats .title { color: #ffd24d; font-weight: bold; margin-bottom: 4px; }
+  #stats .attrs { color: #9ab; margin: 4px 0; }
+  #stats .where { color: #b0c0ff; }
+  #stats .quests { color: #7be07b; margin: 3px 0; }
+  #stats .qdone { color: #6a6; }
+  #stats .equip { color: #c0a070; font-size: 12px; }
+  .bar { position: relative; display: inline-block; width: 200px; height: 13px; background: #1a1f33; border: 1px solid #333a5a; vertical-align: middle; }
+  .bar .fill { height: 100%; }
+  .bar .hp { background: #b03040; } .bar .mp { background: #3060b0; } .bar .xp { background: #7a9a30; }
+  .bar span { position: absolute; inset: 0; font-size: 10px; text-align: center; color: #fff; line-height: 13px; }
+  #skills { bottom: 10px; left: 10px; max-width: 320px; }
+  #skills .sk { color: #7ddfff; } #skills .dim { color: #556; }
+  #log { bottom: 10px; right: 10px; width: 420px; max-height: 150px; overflow: hidden; font-size: 12px; }
+  #inv { top: 10px; right: 10px; width: 320px; max-height: 70vh; overflow: auto; display: none; }
+  #inv.open { display: block; }
+  #inv h3 { margin: 0 0 6px; color: #ffd24d; }
+  #inv .row { margin: 3px 0; }
+  #inv button { font: inherit; font-size: 11px; background: #22305a; color: #cfe; border: 1px solid #445; border-radius: 3px; cursor: pointer; }
+  #help { top: 10px; left: 50%; transform: translateX(-50%); color: #667; font-size: 11px; }
+  #create, #death {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(3,4,10,0.92); z-index: 10; flex-direction: column;
+  }
+  #death { display: none; color: #ff5050; font-size: 28px; }
+  #create .box { background: #0c1020; border: 1px solid #345; border-radius: 8px; padding: 24px 32px; width: 480px; }
+  #create h1 { color: #ffd24d; letter-spacing: 3px; margin: 0 0 4px; font-size: 26px; }
+  #create h2 { color: #8ab; font-size: 14px; margin: 0 0 16px; font-weight: normal; }
+  #create label { display: block; color: #8ab; margin: 12px 0 4px; }
+  #create button { font: inherit; margin: 2px 4px 2px 0; padding: 6px 14px; background: #1a2440; color: #cde; border: 1px solid #446; border-radius: 4px; cursor: pointer; }
+  #create button.on { background: #3a5090; border-color: #7af; color: #fff; }
+  #create input { font: inherit; background: #0a0e1a; color: #fff; border: 1px solid #446; padding: 6px; width: 100%; box-sizing: border-box; }
+  #blurb { color: #9ab; font-size: 12px; margin-top: 10px; min-height: 32px; }
+  #begin { margin-top: 14px !important; background: #2a5a3a !important; border-color: #6c8 !important; }
+  .ic { height: 20px; vertical-align: -4px; filter: invert(1); }
+  .banner { height: 90px; opacity: 0.7; filter: invert(1); }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+  <div id="scene"></div>
+
+  <div id="stats" class="panel" style="display:none"></div>
+  <div id="skills" class="panel" style="display:none"></div>
+  <div id="log" class="panel"></div>
+  <div id="inv" class="panel"></div>
+  <div id="help" class="panel">WASD move &bull; 1-4 skills &bull; E talk &bull; &gt; descend &bull; I pack &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY)</div>
+
+  <div id="create">
+    <div class="box">
+      <div id="banner"></div>
+      <h1>ROGUEMS</h1>
+      <h2>a rogue-like in Merrow Vale &mdash; choose your destiny</h2>
+      <input id="name" placeholder="name your hero" maxlength="16">
+      <label>Class</label><div id="classPick"></div>
+      <label>Race (racial enchantments)</label><div id="racePick"></div>
+      <div id="blurb"></div>
+      <button id="begin">Enter Merrow Vale</button>
+    </div>
+  </div>
+
+  <div id="death">YOU DIED<div style="font-size:14px;color:#99a;margin-top:10px">press Enter to wake in the inn</div></div>
+
+  <script type="module" src="src/game.js"></script>
+</body>
+</html>
