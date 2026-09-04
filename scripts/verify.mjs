@@ -161,6 +161,13 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("stairs are a physical 3D structure", stairMesh);
 
+  const voxels = await page.evaluate(() => {
+    let count = 0;
+    window.game.debugAll().traverse(o => { if (o.userData && o.userData.voxel) count++; });
+    return { count, mons: window.game.monsters().length };
+  });
+  check("hero and monsters render as voxel bodies", voxels.count >= 2, JSON.stringify(voxels));
+
   const kinds = await page.evaluate(() => window.game.core.getMap("greenhills:d9").monsterKinds);
   check("dungeon spawns 3-4 monster kinds", kinds.length >= 3 && kinds.length <= 4, "kinds=" + kinds.join(","));
 

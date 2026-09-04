@@ -232,34 +232,122 @@ function losClear(x0, y0, x1, y1) {
   return true;
 }
 
-// ---------- entity sprites ----------
+// ---------- entity bodies (voxel figures + icon cards, pooled) ----------
+
+const BOX = new THREE.BoxGeometry(1, 1, 1);
+function part(group, mat, w, h, d, x, y, z, rz = 0) {
+  const p = new THREE.Mesh(BOX, mat);
+  p.scale.set(w, h, d);
+  p.position.set(x, y, z);
+  p.rotation.z = rz;
+  group.add(p);
+  return p;
+}
+
+function makeVoxel(glyph, color, scale = 1) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
+  const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.6), roughness: 0.7 });
+  part(g, mat, 0.42, 0.5, 0.28, 0, 0, 0.42);
+  const head = part(g, mat, 0.36, 0.36, 0.34, 0, 0, 0.9);
+  head.userData.head = true;
+  const G = glyph || "?";
+  if ("brgowxYTAUWZShmi&".includes(G)) {
+    if (G === "b" || G === "h") {
+      part(g, dark, 0.5, 0.12, 0.3, -0.45, 0, 0.55, 0.5);
+      part(g, dark, 0.5, 0.12, 0.3, 0.45, 0, 0.55, -0.5);
+    } else if (G === "&" || G === "Y") {
+      part(g, dark, 0.08, 0.28, 0.08, -0.16, 0.12, 1.12, -0.5);
+      part(g, dark, 0.08, 0.28, 0.08, 0.16, 0.12, 1.12, 0.5);
+    } else if (G === "Z") {
+      part(g, mat, 0.08, 0.4, 0.08, -0.27, 0, 0.45);
+      part(g, mat, 0.08, 0.4, 0.08, 0.27, 0, 0.45);
+    } else if (G === "w" || G === "r" || G === "g" || G === "o") {
+      part(g, dark, 0.16, 0.14, 0.18, 0, 0, 1.15);
+      part(g, dark, 0.08, 0.14, 0.08, -0.1, 0.12, 1.05);
+      part(g, dark, 0.08, 0.14, 0.08, 0.1, 0.12, 1.05);
+    } else {
+      part(g, dark, 0.09, 0.16, 0.09, -0.11, 0.1, 1.08);
+      part(g, dark, 0.09, 0.16, 0.09, 0.11, 0.1, 1.08);
+    }
+  }
+  g.scale.setScalar(scale);
+  g.userData.voxel = true;
+  return g;
+}
+
+function makePlayerVoxel(classId, color) {
+  const g = makeVoxel("@", color);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd8d8e8, roughness: 0.4, metalness: 0.5 });
+  if (classId === "fighter") part(g, mat, 0.07, 0.07, 0.6, 0.3, 0, 0.6);
+  else if (classId === "mage") {
+    part(g, mat, 0.3, 0.3, 0.35, 0, 0, 1.25);
+    part(g, mat, 0.06, 0.06, 0.65, 0.32, 0, 0.6);
+  } else {
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 16), mat);
+    halo.position.set(0, 0, 1.28);
+    g.add(halo);
+  }
+  return g;
+}
 
 let entityGroup = null;
 let playerSprite = null;
+let pool = new Map();
 
 function rebuildEntities() {
-  if (entityGroup) scene.remove(entityGroup);
-  entityGroup = new THREE.Group();
-  scene.add(entityGroup);
+  if (!entityGroup) { entityGroup = new THREE.Group(); scene.add(entityGroup); }
   if (!core.player) return;
+  const seen = new Set();
+  const t = performance.now() / 1000;
   for (const e of core.entities()) {
-    if (!visibleSet.has(e.x + "," + e.y)) continue;
-    const s = sprite(e, e.kind === "stairs" ? 1.15 : 0.9);
-    s.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0.7);
-    if (e.kind === "monster" && e.hp < e.maxHp) {
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8 * (e.hp / e.maxHp), 0.07),
-        new THREE.MeshBasicMaterial({ color: 0xff4040 }));
-      bar.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h) + 0.55, 0.75);
-      entityGroup.add(bar);
+    if (e.kind === "stairs" || e.kind === "item" || e.kind === "npc" || e.kind === "portal" || e.kind === "entrance") {
+      const key = "card:" + loadedKey + ":" + e.kind + ":" + e.x + "," + e.y;
+      seen.add(key);
+      if (!pool.has(key) && visibleSet.has(e.x + "," + e.y)) {
+        const s = sprite(e, e.kind === "stairs" ? 1.15 : 0.9);
+        s.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0.7);
+        entityGroup.add(s);
+        pool.set(key, s);
+      }
+      const c = pool.get(key);
+      if (c) c.visible = visibleSet.has(e.x + "," + e.y);
+      continue;
     }
-    s.userData.label = e.name;
-    entityGroup.add(s);
+    if (e.kind !== "monster") continue;
+    const key = "mon:" + e.x + "," + e.y + ":" + e.name;
+    seen.add(key);
+    const vis = visibleSet.has(e.x + "," + e.y);
+    if (!pool.has(key)) {
+      const big = e.maxHp > 60 ? 1.5 : e.maxHp > 25 ? 1.2 : 1;
+      const g = makeVoxel(e.glyph, e.color, big);
+      g.userData.bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.07),
+        new THREE.MeshBasicMaterial({ color: 0xff4040 }));
+      g.userData.bar.visible = false;
+      entityGroup.add(g);
+      g.add(g.userData.bar);
+      g.userData.bar.position.set(0, 0, 1.5);
+      pool.set(key, g);
+    }
+    const g = pool.get(key);
+    g.visible = vis;
+    if (!vis) continue;
+    const wobble = Math.sin(t * 5 + e.x * 3 + e.y) * 0.04;
+    g.position.set(wx(e.x, mapDims.w) + wobble, wy(e.y, mapDims.h), 0);
+    const bar = g.userData.bar;
+    bar.visible = e.hp < e.maxHp;
+    bar.scale.x = Math.max(0.05, e.hp / e.maxHp);
+  }
+  for (const [key, obj] of pool) {
+    if (!seen.has(key)) { entityGroup.remove(obj); pool.delete(key); }
   }
   if (!playerSprite) {
-    playerSprite = sprite({ icon: CLASSES[core.player.classId].icon, glyph: "@", color: CLASSES[core.player.classId].color }, 1);
+    playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color);
+    playerSprite.userData.voxel = true;
     scene.add(playerSprite);
   }
-  playerSprite.position.set(wx(core.player.x, mapDims.w), wy(core.player.y, mapDims.h), 0.7);
+  playerSprite.position.set(wx(core.player.x, mapDims.w), wy(core.player.y, mapDims.h), 0);
+  playerSprite.rotation.z = Math.sin(t * 3) * 0.04;
 }
 
 // ---------- HUD ----------
@@ -416,6 +504,7 @@ window.game = {
   ready: true,
   core,
   debugScene: () => mapGroup,
+  debugAll: () => scene,
   create: (c, r, n) => { core.start(c, r, n); loadedKey = null; afterAction(); return core.status(); },
   status: () => core.status(),
   act: a => core.act(a),
