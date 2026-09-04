@@ -4,7 +4,8 @@ import * as THREE from "three";
 import { Core } from "./core.js";
 import { RACES, CLASSES } from "./data.js";
 
-const core = new Core();
+const urlSeed = new URLSearchParams(location.search).get("seed");
+const core = new Core(urlSeed ? Number(urlSeed) : (Date.now() & 0xffffff));
 const TILE = 1;
 
 const scene = new THREE.Scene();
@@ -310,8 +311,35 @@ const MOVE = {
   W: [0, -1], S: [0, 1], A: [-1, 0], D: [1, 0]
 };
 
+function saveGame() {
+  if (core.screen !== "play" || !core.player) return false;
+  try {
+    localStorage.setItem(Core.SAVE_KEY, JSON.stringify(core.toJSON()));
+    const b = el("saveBtn");
+    b.textContent = "Saved!";
+    setTimeout(() => { b.textContent = "Save"; }, 900);
+    return true;
+  } catch (e) { return false; }
+}
+
+function tryContinue() {
+  const raw = localStorage.getItem(Core.SAVE_KEY);
+  if (!raw) return false;
+  try {
+    if (!core.loadFrom(JSON.parse(raw))) return false;
+  } catch (e) { return false; }
+  el("create").style.display = "none";
+  loadedKey = null;
+  afterAction();
+  return true;
+}
+if (localStorage.getItem(Core.SAVE_KEY)) el("continue").style.display = "inline-block";
+el("saveBtn").addEventListener("click", () => saveGame());
+el("continue").addEventListener("click", () => tryContinue());
+
 function afterAction() {
   if (core.screen !== "play" || !core.player) return;
+  saveGame();
   el("stats").style.display = el("skills").style.display = "block";
   const map = core.getMap(core.player.mapKey);
   if (map.key !== loadedKey) { loadedKey = map.key; buildMapMeshes(map); }
@@ -368,6 +396,8 @@ window.game = {
   items: () => core.itemsOnMap(),
   stairs: () => core.stairsPos(),
   layoutCount: m => core.layoutCount(m),
+  saveGame, tryContinue,
+  hasSave: () => !!localStorage.getItem(Core.SAVE_KEY),
   equip: uid => core.act({ type: "equip", uid }),
   useItem: uid => core.act({ type: "useItem", uid }),
   afterAction

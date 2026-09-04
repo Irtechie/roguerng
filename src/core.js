@@ -575,6 +575,41 @@ export class Core {
     this.say("Innkeep Toma: 'You wake in the inn. Rest, then rise again.'", "#90ff90");
   }
 
+  // ---------- save/load (pure data in, pure data out) ----------
+
+  static SAVE_KEY = "roguerng-save-v1";
+  static SAVE_VERSION = 1;
+
+  toJSON() {
+    return {
+      version: Core.SAVE_VERSION, seed: this.seed, kills: this.kills,
+      player: this.player,
+      maps: [...this.maps.values()].map(m => ({
+        key: m.key, kind: m.kind, mapId: m.mapId, tier: m.tier, arch: m.arch,
+        grid: m.grid, entities: m.entities, stairs: m.stairs, spawn: m.spawn,
+        monsterKinds: m.monsterKinds, w: m.w, h: m.h
+      }))
+    };
+  }
+
+  loadFrom(data) {
+    if (!data || data.version !== Core.SAVE_VERSION) { this.say("Old or broken save ignored - start fresh."); return false; }
+    let maxUid = 1;
+    const bump = v => { if (typeof v === "number" && v > maxUid) maxUid = v; };
+    for (const m of data.maps || []) for (const e of m.entities || []) { bump(e.uid); bump(e.item && e.item.uid); }
+    bump(data.player && data.player.equipment && data.player.equipment.weapon?.uid);
+    bump(data.kills);
+    uid = maxUid + 1;
+    this.seed = data.seed;
+    this.kills = data.kills || 0;
+    this.player = data.player;
+    this.screen = "play";
+    this.dead = false;
+    this.maps = new Map((data.maps || []).map(m => [m.key, { ...m, floors: null }]));
+    if (this.player && this.eff()) { /* derived stats recompute from attrs+gear */ }
+    return true;
+  }
+
   // ---------- read models ----------
 
   status() {

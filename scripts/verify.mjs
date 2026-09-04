@@ -78,7 +78,7 @@ async function walkTo(page, tx, ty, limit = 300) {
   page.on("pageerror", e => errors.push("pageerror: " + e.message));
   page.on("console", m => { if (m.type() === "error") errors.push("console: " + m.text()); });
 
-  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await page.goto(`http://127.0.0.1:${PORT}/?seed=1337`);
   await page.waitForFunction(() => window.game && window.game.ready, null, { timeout: 15000 });
 
   let s = await page.evaluate(() => window.game.status());
@@ -247,6 +247,42 @@ async function walkTo(page, tx, ty, limit = 300) {
     return r1.status === 200 && r2.status === 200;
   });
   check("free art assets are served", artOk);
+
+  const preSave = await page.evaluate(() => {
+    const g = window.game;
+    g.saveGame();
+    const s = g.status();
+    return {
+      x: s.player.x, y: s.player.y, mapKey: s.map.key, xp: s.player.xp,
+      bag: s.player.bag.length, kills: s.kills,
+      gridHash: g.core.getMap("greenhills:1").grid.join("").length,
+      version: JSON.parse(localStorage.getItem("roguerng-save-v1")).version
+    };
+  });
+  check("save button writes versioned save", preSave.version === 1);
+  await page.reload();
+  await page.waitForFunction(() => window.game && window.game.ready, null, { timeout: 15000 });
+  const contVisible = await page.evaluate(() => getComputedStyle(document.getElementById("continue")).display !== "none");
+  check("fresh boot offers Continue when a save exists", contVisible);
+  await page.click("#continue");
+  const postSave = await page.evaluate(() => {
+    const s = window.game.status();
+    return {
+      x: s.player.x, y: s.player.y, mapKey: s.map.key, xp: s.player.xp,
+      bag: s.player.bag.length, kills: s.kills,
+      gridHash: window.game.core.getMap("greenhills:1").grid.join("").length
+    };
+  });
+  check("Continue restores hero and sticky dungeons",
+    JSON.stringify(preSave.x + "," + preSave.y + "," + preSave.mapKey + "," + preSave.bag + "," + preSave.gridHash) ===
+    JSON.stringify(postSave.x + "," + postSave.y + "," + postSave.mapKey + "," + postSave.bag + "," + postSave.gridHash),
+    JSON.stringify({ preSave, postSave }));
+  const badVer = await page.evaluate(() => {
+    const c = window.game.core;
+    const good = c.toJSON(); good.version = 99;
+    return c.loadFrom(good) === false;
+  });
+  check("future-version saves rejected gracefully", badVer);
 
   await page.reload();
   await page.waitForFunction(() => window.game && window.game.ready, null, { timeout: 15000 });
