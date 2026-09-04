@@ -118,7 +118,7 @@ export const BOSSES = {
 
 export const MAPS = {
   greenhills: {
-    name: "Greenhills Village", layouts: 7, tiers: 10, unlockLevel: 1,
+    name: "Greenhills Village", layouts: 7, tiers: 12, unlockLevel: 1,
     difficulty: 1.0, lootShift: 0,
     monsters: ["rat", "bat", "wolf", "goblin", "skeleton", "spider"],
     boss: "greenpaw",
@@ -130,7 +130,7 @@ export const MAPS = {
     }
   },
   darkfang: {
-    name: "Darkfang Forest", layouts: 7, tiers: 10, unlockLevel: 4,
+    name: "Darkfang Forest", layouts: 7, tiers: 12, unlockLevel: 4,
     difficulty: 1.5, lootShift: 4,
     monsters: ["goblin", "skeleton", "orc", "harpy", "wraith", "shade", "troll", "wendigo"],
     boss: "hagraven",
@@ -142,7 +142,7 @@ export const MAPS = {
     }
   },
   ashfall: {
-    name: "Ashfall Mine", layouts: 7, tiers: 10, unlockLevel: 8,
+    name: "Ashfall Mine", layouts: 7, tiers: 12, unlockLevel: 8,
     difficulty: 2.1, lootShift: 8,
     monsters: ["imp", "skeleton", "spider", "orc", "magma", "wraith", "troll", "wendigo"],
     boss: "cinder",

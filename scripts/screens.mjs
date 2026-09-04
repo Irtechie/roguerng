@@ -57,6 +57,24 @@ await page.evaluate(() => {
 await sleep(700);
 await page.screenshot({ path: path.join(OUT, "06-pack-town.png") });
 
+await page.evaluate(() => {
+  const g = window.game;
+  g.travel("greenhills", 2);
+  const mons = g.monsters();
+  for (const m of mons.slice(0, 6)) g.stepTowards(m.x, m.y);
+});
+await sleep(900);
+await page.screenshot({ path: path.join(OUT, "08-creatures.png") });
+
+await page.evaluate(() => {
+  const g = window.game;
+  g.toggleMap();
+  const st = g.stairs();
+  if (st) g.stepTowards(st.x, st.y);
+});
+await sleep(1100);
+await page.screenshot({ path: path.join(OUT, "09-minimap-stairs.png") });
+
 await browser.close();
 srv.close();
 console.log("shots written to", OUT);

@@ -158,13 +158,25 @@ function buildMapMeshes(map) {
 
   if (map.stairs) {
     const stairsGroup = new THREE.Group();
-    const stepMat = new THREE.MeshStandardMaterial({ color: 0x6a5f4a, roughness: 0.9 });
-    for (let i = 0; i < 3; i++) {
-      const step = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.15), stepMat);
-      step.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h), 0.15 + i * 0.15);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xb9a98c, roughness: 0.85 });
+    for (const sx of [-0.72, 0.72]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.9, 1.3), stoneMat);
+      side.position.set(wx(map.stairs.x, map.w) + sx, wy(map.stairs.y, map.h), 0.65);
+      stairsGroup.add(side);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.3, 0.36), stoneMat);
+    lintel.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h) - 0.85, 1.05);
+    stairsGroup.add(lintel);
+    for (let i = 0; i < 4; i++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.34, 0.15), stoneMat);
+      step.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h) - 0.55 + i * 0.36, 0.16 + i * 0.14);
       stairsGroup.add(step);
     }
-    const glow = new THREE.PointLight(0xffb060, 4, 4);
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 1.6),
+      new THREE.MeshStandardMaterial({ color: 0x030409, roughness: 1 }));
+    shaft.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h) + 0.9, -0.6);
+    stairsGroup.add(shaft);
+    const glow = new THREE.PointLight(0xffb060, 5, 5);
     glow.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h), 1.5);
     stairsGroup.add(glow);
     mapGroup.add(stairsGroup);
@@ -246,40 +258,129 @@ function part(group, mat, w, h, d, x, y, z, rz = 0) {
   return p;
 }
 
-function makeVoxel(glyph, color, scale = 1) {
+const SPECIES = {
+  rat: { shape: "quadruped", scale: 0.5 }, bat: { shape: "bat", scale: 0.45 },
+  wolf: { shape: "quadruped", scale: 1.0 }, goblin: { shape: "biped", scale: 0.65 },
+  imp: { shape: "imp", scale: 0.55 }, skeleton: { shape: "skeleton", scale: 1.0 },
+  spider: { shape: "spider", scale: 0.85 }, orc: { shape: "brute", scale: 1.2 },
+  harpy: { shape: "harpy", scale: 1.0 }, wraith: { shape: "float", scale: 1.0 },
+  magma: { shape: "slab", scale: 1.35 }, shade: { shape: "float", scale: 0.95 },
+  troll: { shape: "brute", scale: 1.45 }, wendigo: { shape: "tall", scale: 1.3 },
+  greenpaw: { shape: "brute", scale: 1.7 }, hagraven: { shape: "harpy", scale: 1.5 },
+  cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 }
+};
+
+function makeVoxel(speciesId, glyph, color, isBoss) {
+  const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", "&": "troll" };
+  const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
+  const sp = known || { shape: isBoss ? "brute" : "biped", scale: isBoss ? 1.7 : 1 };
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55 });
   const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.6), roughness: 0.7 });
-  part(g, mat, 0.42, 0.5, 0.28, 0, 0, 0.42);
-  const head = part(g, mat, 0.36, 0.36, 0.34, 0, 0, 0.9);
-  head.userData.head = true;
-  const G = glyph || "?";
-  if ("brgowxYTAUWZShmi&".includes(G)) {
-    if (G === "b" || G === "h") {
-      part(g, dark, 0.5, 0.12, 0.3, -0.45, 0, 0.55, 0.5);
-      part(g, dark, 0.5, 0.12, 0.3, 0.45, 0, 0.55, -0.5);
-    } else if (G === "&" || G === "Y") {
-      part(g, dark, 0.08, 0.28, 0.08, -0.16, 0.12, 1.12, -0.5);
-      part(g, dark, 0.08, 0.28, 0.08, 0.16, 0.12, 1.12, 0.5);
-    } else if (G === "Z") {
-      part(g, mat, 0.08, 0.4, 0.08, -0.27, 0, 0.45);
-      part(g, mat, 0.08, 0.4, 0.08, 0.27, 0, 0.45);
-    } else if (G === "w" || G === "r" || G === "g" || G === "o") {
-      part(g, dark, 0.16, 0.14, 0.18, 0, 0, 1.15);
-      part(g, dark, 0.08, 0.14, 0.08, -0.1, 0.12, 1.05);
-      part(g, dark, 0.08, 0.14, 0.08, 0.1, 0.12, 1.05);
-    } else {
+  const light = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.4), roughness: 0.5 });
+  const head = p => { p.userData.head = true; return p; };
+  switch (sp.shape) {
+    case "quadruped":
+      part(g, mat, 0.34, 0.6, 0.3, 0, 0, 0.33);
+      head(part(g, mat, 0.26, 0.26, 0.26, 0, 0.38, 0.42));
+      part(g, dark, 0.12, 0.1, 0.1, 0, 0.52, 0.46);
+      part(g, dark, 0.06, 0.12, 0.06, -0.09, 0.4, 0.6);
+      part(g, dark, 0.06, 0.12, 0.06, 0.09, 0.4, 0.6);
+      for (const [lx, ly] of [[-0.12, -0.2], [0.12, -0.2], [-0.12, 0.2], [0.12, 0.2]])
+        part(g, dark, 0.07, 0.07, 0.22, lx, ly, 0.11);
+      part(g, dark, 0.05, 0.35, 0.05, 0, -0.45, 0.35, 0.6);
+      break;
+    case "spider":
+      part(g, mat, 0.34, 0.34, 0.22, 0, 0, 0.26);
+      head(part(g, mat, 0.2, 0.2, 0.16, 0, 0.3, 0.26));
+      for (let leg = 0; leg < 8; leg++) {
+        const side = leg % 2 ? 1 : -1, along = (leg >> 1) - 1.5;
+        part(g, dark, 0.5, 0.05, 0.05, side * 0.32, along * 0.14, 0.18, side * 0.5);
+      }
+      break;
+    case "bat":
+      part(g, mat, 0.22, 0.24, 0.26, 0, 0, 0.5);
+      head(part(g, mat, 0.16, 0.16, 0.16, 0, 0, 0.72));
+      part(g, dark, 0.62, 0.06, 0.34, -0.38, 0, 0.58, 0.35);
+      part(g, dark, 0.62, 0.06, 0.34, 0.38, 0, 0.58, -0.35);
+      break;
+    case "skeleton":
+      part(g, mat, 0.3, 0.45, 0.2, 0, 0, 0.45);
+      head(part(g, light, 0.28, 0.28, 0.26, 0, 0, 0.88));
+      part(g, mat, 0.06, 0.42, 0.06, -0.24, 0, 0.44);
+      part(g, mat, 0.06, 0.42, 0.06, 0.24, 0, 0.44);
+      part(g, mat, 0.07, 0.4, 0.07, -0.09, 0, 0.1);
+      part(g, mat, 0.07, 0.4, 0.07, 0.09, 0, 0.1);
+      part(g, dark, 0.24, 0.1, 0.1, 0, 0, 0.72);
+      break;
+    case "float":
+      part(g, mat, 0.4, 0.4, 0.7, 0, 0, 0.85);
+      head(part(g, mat, 0.3, 0.3, 0.28, 0, 0, 1.35));
+      part(g, dark, 0.08, 0.3, 0.08, -0.26, 0, 0.95, 0.4);
+      part(g, dark, 0.08, 0.3, 0.08, 0.26, 0, 0.95, -0.4);
+      part(g, dark, 0.3, 0.3, 0.4, 0, 0, 0.4);
+      break;
+    case "slab":
+      part(g, mat, 0.85, 0.65, 0.5, 0, 0, 0.3);
+      part(g, light, 0.5, 0.35, 0.18, 0, 0, 0.62);
+      head(part(g, mat, 0.25, 0.25, 0.3, 0, 0.25, 0.68));
+      part(g, light, 0.6, 0.1, 0.1, 0, -0.2, 0.55);
+      break;
+    case "harpy":
+      part(g, mat, 0.34, 0.4, 0.26, 0, 0, 0.6);
+      head(part(g, light, 0.28, 0.28, 0.26, 0, 0, 0.98));
+      part(g, dark, 0.7, 0.08, 0.4, -0.42, 0, 0.75, 0.4);
+      part(g, dark, 0.7, 0.08, 0.4, 0.42, 0, 0.75, -0.4);
+      part(g, dark, 0.08, 0.3, 0.08, -0.09, 0, 0.2);
+      part(g, dark, 0.08, 0.3, 0.08, 0.09, 0, 0.2);
+      part(g, light, 0.14, 0.12, 0.12, 0, 0.18, 1.0);
+      break;
+    case "imp":
+      part(g, mat, 0.24, 0.26, 0.2, 0, 0, 0.32);
+      head(part(g, mat, 0.22, 0.22, 0.2, 0, 0, 0.6));
+      part(g, dark, 0.06, 0.2, 0.06, 0, 0, 0.78);
+      part(g, dark, 0.4, 0.05, 0.24, -0.26, 0, 0.45, 0.45);
+      part(g, dark, 0.4, 0.05, 0.24, 0.26, 0, 0.45, -0.45);
+      part(g, dark, 0.06, 0.22, 0.06, -0.07, 0, 0.1);
+      part(g, dark, 0.06, 0.22, 0.06, 0.07, 0, 0.1);
+      break;
+    case "tall":
+      part(g, mat, 0.36, 0.5, 0.26, 0, 0, 0.75);
+      head(part(g, light, 0.3, 0.36, 0.3, 0, 0, 1.25));
+      part(g, dark, 0.07, 0.32, 0.07, -0.14, 0.12, 1.5, -0.5);
+      part(g, dark, 0.07, 0.32, 0.07, 0.14, 0.12, 1.5, 0.5);
+      part(g, dark, 0.3, 0.1, 0.3, 0, 0, 1.05);
+      part(g, mat, 0.08, 0.5, 0.08, -0.1, 0, 0.28);
+      part(g, mat, 0.08, 0.5, 0.08, 0.1, 0, 0.28);
+      part(g, dark, 0.07, 0.55, 0.07, -0.24, 0, 1.05, 0.3);
+      part(g, dark, 0.07, 0.55, 0.07, 0.24, 0, 1.05, -0.3);
+      break;
+    case "brute":
+      part(g, mat, 0.62, 0.5, 0.36, 0, 0, 0.5);
+      head(part(g, mat, 0.34, 0.3, 0.32, 0, 0, 0.95));
+      part(g, dark, 0.16, 0.14, 0.16, 0, 0.18, 1.05);
+      part(g, dark, 0.1, 0.26, 0.1, -0.14, 0.1, 1.12, -0.5);
+      part(g, dark, 0.1, 0.26, 0.1, 0.14, 0.1, 1.12, 0.5);
+      part(g, dark, 0.16, 0.42, 0.16, -0.4, 0, 0.5);
+      part(g, dark, 0.16, 0.42, 0.16, 0.4, 0, 0.5);
+      part(g, dark, 0.14, 0.36, 0.14, -0.14, 0, 0.14);
+      part(g, dark, 0.14, 0.36, 0.14, 0.14, 0, 0.14);
+      break;
+    default:
+      part(g, mat, 0.42, 0.5, 0.28, 0, 0, 0.42);
+      head(part(g, mat, 0.36, 0.36, 0.34, 0, 0, 0.9));
       part(g, dark, 0.09, 0.16, 0.09, -0.11, 0.1, 1.08);
       part(g, dark, 0.09, 0.16, 0.09, 0.11, 0.1, 1.08);
-    }
   }
-  g.scale.setScalar(scale);
+  g.scale.setScalar(sp.scale);
   g.userData.voxel = true;
+  g.userData.species = speciesId || sp.shape;
+  g.userData.floats = sp.shape === "float";
   return g;
 }
 
 function makePlayerVoxel(classId, color) {
-  const g = makeVoxel("@", color);
+  const g = makeVoxel("hero", "@", color);
   const mat = new THREE.MeshStandardMaterial({ color: 0xd8d8e8, roughness: 0.4, metalness: 0.5 });
   if (classId === "fighter") part(g, mat, 0.07, 0.07, 0.6, 0.3, 0, 0.6);
   else if (classId === "mage") {
@@ -321,8 +422,7 @@ function rebuildEntities() {
     seen.add(key);
     const vis = visibleSet.has(e.x + "," + e.y);
     if (!pool.has(key)) {
-      const big = e.maxHp > 60 ? 1.5 : e.maxHp > 25 ? 1.2 : 1;
-      const g = makeVoxel(e.glyph, e.color, big);
+      const g = makeVoxel(e.monsterId, e.glyph, e.color, e.isBoss);
       g.userData.bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.07),
         new THREE.MeshBasicMaterial({ color: 0xff4040 }));
       g.userData.bar.visible = false;
@@ -335,7 +435,8 @@ function rebuildEntities() {
     g.visible = vis;
     if (!vis) continue;
     const wobble = Math.sin(t * 5 + e.x * 3 + e.y) * 0.04;
-    g.position.set(wx(e.x, mapDims.w) + wobble, wy(e.y, mapDims.h), 0);
+    g.position.set(wx(e.x, mapDims.w) + wobble, wy(e.y, mapDims.h),
+      g.userData.floats ? 0.35 + 0.1 * Math.sin(t * 2.2 + e.x) : 0);
     const bar = g.userData.bar;
     bar.visible = e.hp < e.maxHp;
     bar.scale.x = Math.max(0.05, e.hp / e.maxHp);
@@ -424,6 +525,44 @@ el("create").addEventListener("click", e => {
 });
 renderCreate();
 
+// ---------- minimap ----------
+
+const mmCanvas = el("minimap");
+const mmCtx = mmCanvas.getContext("2d");
+let mapOpen = false, mmLast = 0;
+
+function drawMinimap() {
+  if (!mapOpen || !core.player || !mapDims) return;
+  const map = core.getMap(core.player.mapKey);
+  const exp = explored.get(map.key) || new Set();
+  const s = Math.floor(176 / Math.max(map.w, map.h));
+  const ox = Math.floor((180 - map.w * s) / 2), oy = Math.floor((180 - map.h * s) / 2);
+  mmCtx.fillStyle = "#05060c";
+  mmCtx.fillRect(0, 0, 180, 180);
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+    if (!exp.has(x + "," + y)) continue;
+    const ch = map.grid[y][x];
+    mmCtx.fillStyle = ch === "#" ? "#3a3f52" : ch === "T" ? "#1d4a24" : ch === "r" ? "#4a4a50" : "#22283a";
+    mmCtx.fillRect(ox + x * s, oy + y * s, s, s);
+  }
+  const dot = (x, y, color, r = Math.max(2, s / 2)) => {
+    mmCtx.fillStyle = color;
+    mmCtx.beginPath();
+    mmCtx.arc(ox + x * s + s / 2, oy + y * s + s / 2, r, 0, 7);
+    mmCtx.fill();
+  };
+  if (map.stairs) dot(map.stairs.x, map.stairs.y, "#ffb040", Math.max(3, s * 0.8));
+  for (const e of core.entities()) {
+    if (!exp.has(e.x + "," + e.y)) continue;
+    if (e.kind === "monster") dot(e.x, e.y, e.isBoss ? "#ff2060" : "#e04040");
+    else if (e.kind === "item") dot(e.x, e.y, "#e8d070", Math.max(1.5, s / 3));
+    else if (e.kind === "npc") dot(e.x, e.y, "#50c878");
+    else if (e.kind === "entrance") dot(e.x, e.y, "#ff8030", Math.max(3, s * 0.8));
+    else if (e.kind === "portal") dot(e.x, e.y, "#b060ff");
+  }
+  dot(core.player.x, core.player.y, "#ffffff", Math.max(2.5, s * 0.7));
+}
+
 // ---------- input ----------
 
 const MOVE = {
@@ -460,7 +599,6 @@ el("continue").addEventListener("click", () => tryContinue());
 
 function afterAction() {
   if (core.screen !== "play" || !core.player) return;
-  saveGame();
   el("stats").style.display = el("skills").style.display = "block";
   const map = core.getMap(core.player.mapKey);
   if (map.key !== loadedKey) { loadedKey = map.key; buildMapMeshes(map); }
@@ -478,6 +616,11 @@ window.addEventListener("keydown", e => {
   else if (e.key === "e" || e.key === "E") { core.act({ type: "interact" }); afterAction(); }
   else if (e.key === ">" || e.key === ">") { core.act({ type: "descend" }); afterAction(); }
   else if (e.key === "i" || e.key === "I") { el("inv").classList.toggle("open"); renderHud(); }
+  else if (e.key === "m" || e.key === "M") {
+    mapOpen = !mapOpen;
+    mmCanvas.style.display = mapOpen ? "block" : "none";
+    drawMinimap();
+  }
   else if (/^[1-6]$/.test(e.key)) { core.act({ type: "skill", slot: Number(e.key) - 1 }); afterAction(); }
 });
 
@@ -497,6 +640,8 @@ function loop() {
   camera.lookAt(camTarget.clone().lerp(new THREE.Vector3(px, py, 0), 1));
   torch.position.set(px, py, 3.5);
   renderer.render(scene, camera);
+  const now = performance.now();
+  if (mapOpen && now - mmLast > 250) { mmLast = now; drawMinimap(); }
 }
 loop();
 
@@ -519,6 +664,11 @@ window.game = {
   stairs: () => core.stairsPos(),
   layoutCount: m => core.layoutCount(m),
   saveGame, tryContinue,
+  debugVoxel: id => {
+    const g = makeVoxel(id, "", "#ffffff");
+    return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
+  },
+  toggleMap: () => { mapOpen = !mapOpen; mmCanvas.style.display = mapOpen ? "block" : "none"; drawMinimap(); return mapOpen; },
   hasSave: () => !!localStorage.getItem(Core.SAVE_KEY),
   exportDemoGlb: () => new Promise((resolve, reject) => {
     if (!playerSprite) return reject(new Error("no hero yet"));

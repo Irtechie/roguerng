@@ -488,7 +488,7 @@ export class Core {
     const map = this.getMap(p.mapKey);
     const [mapId, tStr] = p.mapKey.split(":d");
     const tier = Number(tStr), def = MAPS[mapId];
-    const onStairs = Math.abs(map.stairs.x - p.x) + Math.abs(map.stairs.y - p.y) <= 1;
+    const onStairs = Math.max(Math.abs(map.stairs.x - p.x), Math.abs(map.stairs.y - p.y)) <= 1;
     if (!onStairs) { this.say("You must stand on or beside the stairs (>)."); return; }
     if (tier >= def.tiers) { this.say("You have conquered every depth of this place.", "#ffd700"); return; }
     p.unlockedTiers[mapId] = Math.max(p.unlockedTiers[mapId] || 1, tier + 1);
@@ -554,10 +554,7 @@ export class Core {
     const e = this.eff();
     p.hp = Math.min(p.hp, e.maxHp);
     p.turnsSinceDamage++;
-    if (p.turnsSinceDamage % 5 === 0 && p.hp < e.maxHp) {
-      const nearMonster = map.entities.some(x => x.type === "monster" && x.hp > 0 && dist(x, p) <= 7);
-      if (!nearMonster) p.hp++;
-    }
+    if (map.kind === "town" && p.turnsSinceDamage % 10 === 0 && p.hp < e.maxHp) p.hp++;
   }
 
   monsterStep(m) {
@@ -667,7 +664,7 @@ export class Core {
   entities() {
     const map = this.getMap(this.player.mapKey);
     const out = map.entities.filter(e => !(e.type === "monster" && e.hp <= 0)).map(e => {
-      if (e.type === "monster") return { kind: "monster", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name };
+      if (e.type === "monster") return { kind: "monster", monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name };
       if (e.type === "item") return { kind: "item", glyph: e.item.glyph, color: e.item.color, icon: e.item.icon, x: e.x, y: e.y, name: itemLabel(e.item) };
       if (e.type === "npc") return { kind: "npc", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "portal") return { kind: "portal", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };

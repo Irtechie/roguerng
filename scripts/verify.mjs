@@ -112,10 +112,26 @@ async function walkTo(page, tx, ty, limit = 300) {
       hpFinal: c.player.hp, tsdBefore, tsdAfter: c.player.turnsSinceDamage };
   });
   check("failed casts charge a 2-turn cooldown, no spam-farm", regen.failed === false && regen.cd === 2);
-  check("out-of-combat HP trickles over idle turns", regen.hpIdle >= regen.hp0 + 4, `hp ${regen.hp0}->${regen.hpIdle}`);
+  check("town rest trickles HP slowly (3 per 30 turns)", regen.hpIdle === regen.hp0 + 3, `hp ${regen.hp0}->${regen.hpIdle}`);
   check("mana does not regen per turn", regen.mpIdle === regen.mp0);
   check("recent damage blocks regen", regen.hpAfterHit < regen.hpBeforeHit && regen.hpFinal === regen.hpAfterHit,
     JSON.stringify({ b: regen.hpBeforeHit, a: regen.hpAfterHit, f: regen.hpFinal, t0: regen.tsdBefore, t1: regen.tsdAfter }));
+
+  const fieldRegen = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    g.travel("greenhills", 1);
+    c.getMap(c.player.mapKey).entities.filter(x => x.type === "monster").forEach(m => { m.hp = 0; });
+    const st = g.stairs();
+    c.player.x = st.x; c.player.y = st.y;
+    c.player.hp = Math.max(1, c.eff().maxHp - 20);
+    const hp0 = c.player.hp;
+    for (let i = 0; i < 40; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    return { hp0, hpNow: c.player.hp, mapKey: c.player.mapKey };
+  });
+  check("no HP regen in the field (dungeon stays dangerous)", fieldRegen.hpNow === fieldRegen.hp0 && fieldRegen.mapKey.includes(":d"),
+    JSON.stringify(fieldRegen));
+  const manualSave = await page.evaluate(() => window.game.hasSave() === false);
+  check("playing never auto-saves (Save button only)", manualSave);
 
   const layouts = await page.evaluate(() => window.game.layoutCount("greenhills"));
   check("map offers 6+ dungeon layouts over its tiers", layouts >= 6, "distinct=" + layouts);
@@ -157,11 +173,15 @@ async function walkTo(page, tx, ty, limit = 300) {
 
   const stairMesh = await page.evaluate(() => {
     const g = window.game.debugScene();
-    return !!g && !!g.userData.stairsGroup && g.userData.stairsGroup.children.length >= 3;
+    return !!g && !!g.userData.stairsGroup && g.userData.stairsGroup.children.length >= 8;
   });
-  check("stairs are a physical 3D structure", stairMesh);
+  check("stairs are a framed 3D structure, not an open hole", stairMesh);
 
-  const voxels = await page.evaluate(() => {
+  const voxels = await page.evaluate(async () => {
+    const c = window.game.core;
+    c.getMap(c.player.mapKey).entities.forEach(x => { if (x.type === "monster" && x.hp === 0) x.hp = x.maxHp || 10; });
+    window.game.afterAction();
+    await new Promise(r => setTimeout(r, 200));
     let count = 0;
     window.game.debugAll().traverse(o => { if (o.userData && o.userData.voxel) count++; });
     return { count, mons: window.game.monsters().length };
@@ -170,6 +190,44 @@ async function walkTo(page, tx, ty, limit = 300) {
 
   const kinds = await page.evaluate(() => window.game.core.getMap("greenhills:d9").monsterKinds);
   check("dungeon spawns 3-4 monster kinds", kinds.length >= 3 && kinds.length <= 4, "kinds=" + kinds.join(","));
+
+  const anatomy = await page.evaluate(() => ({
+    rat: window.game.debugVoxel("rat"), spider: window.game.debugVoxel("spider"),
+    troll: window.game.debugVoxel("troll"), wraith: window.game.debugVoxel("wraith")
+  }));
+  check("monsters have species anatomy (rat 0.5x quadruped, spider 8 legs, troll 1.45x, floating wraith)",
+    anatomy.rat.parts >= 8 && anatomy.rat.scale <= 0.6 &&
+    anatomy.spider.parts >= 10 &&
+    anatomy.troll.scale >= 1.4 && anatomy.spider.scale < anatomy.troll.scale &&
+    anatomy.wraith.parts >= 5,
+    JSON.stringify(anatomy));
+
+  const diagDown = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    const st = g.stairs();
+    c.player.x = st.x + 1; c.player.y = st.y + 1;
+    const before = c.player.mapKey;
+    g.descend();
+    return { before, after: g.status().map.key };
+  });
+  check("stairs work from diagonal standing too", diagDown.before !== diagDown.after,
+    JSON.stringify(diagDown));
+
+  const deepLadder = await page.evaluate(() => {
+    const m = window.game.core.getMap("greenhills:d12");
+    return { tier: m.tier, boss: m.entities.some(e => e.type === "monster" && e.boss) };
+  });
+  check("ladder runs 12 tiers with a tier-12 boss", deepLadder.tier === 12 && deepLadder.boss,
+    JSON.stringify(deepLadder));
+
+  const mapUi = await page.evaluate(() => {
+    const on = window.game.toggleMap();
+    const cv = document.getElementById("minimap");
+    const painted = cv.getContext("2d").getImageData(20, 20, 140, 140).data.some(v => v > 0);
+    return { on, visible: cv.style.display === "block", painted };
+  });
+  check("M opens a minimap of the explored area", mapUi.on && mapUi.visible && mapUi.painted,
+    JSON.stringify(mapUi));
 
   await page.screenshot({ path: path.join(ROOT, "verify-shot-dungeon.png") });
 
