@@ -702,6 +702,20 @@ async function walkTo(page, tx, ty, limit = 300) {
     JSON.stringify({ hero: sceneModels.hero, species, meshes: sceneModels.meshes }));
   await page.screenshot({ path: path.join(ROOT, "verify-shot-models.png") });
 
+  const facingWorld = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    const step = !c.blocked(c.player.x + 1, c.player.y) ? [1, 0]
+      : (!c.blocked(c.player.x - 1, c.player.y) ? [-1, 0] : [0, 1]);
+    c.act({ type: "move", dx: step[0], dy: step[1] });
+    for (let i = 0; i < 16; i++) await new Promise(r => requestAnimationFrame(r));
+    const fwd = g.heroForward();
+    if (!fwd) return { ok: false, reason: "no model root (hero not a GLB?)" };
+    const ex = step[0], ey = -step[1];
+    const dot = fwd.x * ex + fwd.y * ey;
+    return { ok: dot > 0.7, step, fwd, dot: +dot.toFixed(2) };
+  });
+  check("GLB hero actually walks facing its movement direction", facingWorld.ok, JSON.stringify(facingWorld));
+
   check("no page errors during full loop", errors.length === 0, errors.join(" | ").slice(0, 300));
 
   await browser.close();

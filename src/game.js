@@ -558,6 +558,7 @@ const GLB_FILES = {
   torch_lit: "assets/models/torch_lit.glb"
 };
 const modelStatus = { loaded: {}, failed: [], count: 0, total: Object.keys(GLB_FILES).length, ready: false };
+const MODEL_YAW = Math.PI;
 function onModelsSettled() {
   if (modelStatus.count < modelStatus.total) return;
   modelStatus.ready = modelStatus.count === modelStatus.total;
@@ -578,10 +579,11 @@ const pickClip = (anims, patterns) => {
   return anims[0];
 };
 
-function modelInstance(name, height) {
+function modelInstance(name, height, faced) {
   const src = GLB[name];
   if (!src) return null;
   const inner = cloneSkeleton(src.scene);
+  if (faced) inner.rotation.y = MODEL_YAW;
   const mats = [];
   inner.traverse(o => {
     if (o.isMesh && o.material) { o.material = o.material.clone(); mats.push(o.material); }
@@ -599,6 +601,7 @@ function modelInstance(name, height) {
   rotator.position.z = -new THREE.Box3().setFromObject(g).min.z / s;
   g.userData.model = name;
   g.userData.mats = mats;
+  if (faced) g.userData.modelRoot = inner;
   if (src.animations.length) {
     const mixer = new THREE.AnimationMixer(inner);
     const idleClip = pickClip(src.animations, [/^Idle(_B|_C)?$/, /Idle/]);
@@ -648,7 +651,7 @@ function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly) {
   const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
   const modelName = proceduralOnly ? null : (MONSTER_MODELS[speciesId] || MONSTER_MODELS[byGlyph[glyph]]);
   if (modelName && GLB[modelName]) {
-    const m = modelInstance(modelName, (known ? known.scale : 1) * (isBoss ? 1.25 : 1) * 1.25);
+    const m = modelInstance(modelName, (known ? known.scale : 1) * (isBoss ? 1.25 : 1) * 1.25, true);
     if (m) {
       if (known && known.shape === "float") m.userData.floats = true;
       applyShadows(m);
@@ -832,7 +835,7 @@ function makeProp(e, dims) {
 function makePlayerVoxel(classId, color) {
   const modelName = CLASS_MODELS[classId];
   if (modelName && GLB[modelName]) {
-    const m = modelInstance(modelName, 1.4);
+    const m = modelInstance(modelName, 1.4, true);
     if (m) { addBlobShadow(m, 0.36); applyShadows(m); return m; }
   }
   const g = makeVoxel("hero", "@", color);
@@ -1325,6 +1328,15 @@ window.game = {
     return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
   },
   debugModels: () => ({ ...modelStatus }),
+  heroForward: () => {
+    const root = playerSprite?.userData.modelRoot;
+    if (!root) return null;
+    playerSprite.updateWorldMatrix(true, true);
+    const q = new THREE.Quaternion();
+    root.getWorldQuaternion(q);
+    const v = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    return { x: +v.x.toFixed(2), y: +v.y.toFixed(2), z: +v.z.toFixed(2) };
+  },
   debugModelFor: id => {
     const g = makeVoxel(id, "", "#888888");
     return { model: g.userData.model || null, animated: !!g.userData.mixer };
