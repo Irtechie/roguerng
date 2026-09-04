@@ -1,6 +1,6 @@
 # S2 - Save/load (localStorage, Save button, autosave)
 
-Status: pending | Owner: agent | Blockers: S1
+Status: done | Owner: agent | Blockers: S1
 Owning component: src/, scripts/
 Observable outcome: player kills a monster, clicks Save, reloads the page,
 sees the same hero (position, xp, bag, seed, visited dungeon layouts) and can

@@ -1,6 +1,6 @@
 # S3 - Outdoors: Greenhills village exterior with dungeon entrance
 
-Status: pending | Owner: agent | Blockers: S2
+Status: done | Owner: agent | Blockers: S2
 Owning component: src/, assets/
 Observable outcome: stepping on the Greenhills gate in town now lands the hero
 in an open outdoor village map (grass, scattered tree/rock props, sun/sky

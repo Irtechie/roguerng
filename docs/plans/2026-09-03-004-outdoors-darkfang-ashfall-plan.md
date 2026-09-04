@@ -1,6 +1,6 @@
 # S4 - Outdoors for Darkfang and Ashfall
 
-Status: pending | Owner: agent | Blockers: S3
+Status: done | Owner: agent | Blockers: S3
 Owning component: src/
 Observable outcome: Darkfang gate lands in a forest-clearing outdoor map with
 its own door -> dungeon ladder; Ashfall gate lands on a scorched slope outdoor

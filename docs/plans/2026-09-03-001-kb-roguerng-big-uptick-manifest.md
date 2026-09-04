@@ -67,6 +67,10 @@ absent); components named as directories: src/, scripts/, vendor/, assets/.
 
 Gate ledger:
 - brainstorm-to-plan: passed (source = research note + user directive)
+- work: COMPLETE 2026-09-04 - S1..S8 all done, verify.mjs 36/36 PASS
+  (seeds, saves, outdoors x3, stairs structure, regen economy, voxel bodies,
+  GLB round-trip: 3 mesh parts re-imported, 5 fromGlb nodes, no page errors)
+- plan-to-work: passed 2026-09-04T02:55Z
 - plan-to-work: passed 2026-09-04T02:55Z
   evidence: 8 slice files present under docs/plans/; every requirement in the
     source note's Impact list maps to a slice; DAG acyclic (S2<-S1, S3<-S2,

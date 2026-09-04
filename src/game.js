@@ -1,6 +1,8 @@
 // RogueMS web client: Three.js rogue-style renderer + DOM HUD. All rules in core.js.
 
 import * as THREE from "three";
+import { GLTFLoader } from "../vendor/GLTFLoader.js";
+import { GLTFExporter } from "../vendor/GLTFExporter.js";
 import { Core } from "./core.js";
 import { RACES, CLASSES } from "./data.js";
 
@@ -518,6 +520,27 @@ window.game = {
   layoutCount: m => core.layoutCount(m),
   saveGame, tryContinue,
   hasSave: () => !!localStorage.getItem(Core.SAVE_KEY),
+  exportDemoGlb: () => new Promise((resolve, reject) => {
+    if (!playerSprite) return reject(new Error("no hero yet"));
+    new GLTFExporter().parse(playerSprite, buf => {
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      resolve(btoa(bin));
+    }, reject, { binary: true });
+  }),
+  importGlbDemo: b64 => new Promise((resolve, reject) => {
+    const bytes = atob(b64);
+    const buf = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+    new GLTFLoader().parse(buf.buffer, "", gltf => {
+      let parts = 0;
+      gltf.scene.traverse(o => { o.userData.fromGlb = true; if (o.isMesh) parts++; });
+      gltf.scene.position.set(playerSprite.position.x + 1.5, playerSprite.position.y, 0);
+      scene.add(gltf.scene);
+      resolve({ ok: true, parts });
+    }, reject);
+  }),
   equip: uid => core.act({ type: "equip", uid }),
   useItem: uid => core.act({ type: "useItem", uid }),
   afterAction

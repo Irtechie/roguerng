@@ -54,8 +54,13 @@ collect-quest-items-and-return loop.
 
 - Current artifact: working prototype (index.html, src/data.js, src/gen.js, src/core.js, src/game.js)
 - Next allowed action: human eye check of rogue-style look (play: `node scripts/serve.mjs`), then mark complete or request changes
-- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (22/22, incl. map-3 gating,
-  3-4 monster kinds, per-map difficulty ladder, art assets), 2026-09-03; shots/ rendered
+- Last proof: `node scripts/verify.mjs` -> ALL CHECKS PASSED (36/36) 2026-09-04:
+  big-uptick manifest 2026-09-03-001 COMPLETE - per-character sticky seeds,
+  localStorage save/Continue/autosave (v1), outdoors village maps with tree/rock
+  props + physical entrances into the dungeon ladder (all 3 maps), physical 3D
+  stair structure + torch glow, out-of-combat HP regen + no mana trickle + cast
+  fumble cooldown, voxel Minecraft-style bodies with class gear, and a proven
+  GLB export/import round-trip (vendored three GLTF stack) ready for CC0 packs.
 - Added since U1: 54 free CC-BY game-icons (assets/, ATTRIBUTION.md), procedural tile
   textures, 3rd map Ashfall Mine (Lv8, x2.1 difficulty, loot+8), Ember Imp/Magma Slab
   monsters, Cinder Golem boss, Foreman Halla quest, screenshots in shots/

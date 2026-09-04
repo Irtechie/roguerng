@@ -1,6 +1,6 @@
 # S8 - GLB import path (vendored loaders + export/import round-trip)
 
-Status: pending | Owner: agent | Blockers: S7
+Status: done | Owner: agent | Blockers: S7
 Owning component: vendor/, src/, scripts/
 Observable outcome: a voxel monster exported to GLB re-imports at runtime and
 replaces its voxel body in-scene; dropping any CC0 .glb into assets/models/

@@ -1,6 +1,6 @@
 # S7 - Voxel 3D bodies (Minecraft-look, replacing card sprites)
 
-Status: pending | Owner: agent | Blockers: none
+Status: done | Owner: agent | Blockers: none
 Owning component: src/
 Observable outcome: hero and every monster render as small shaded voxel
 figures (torso/head/distinctive head feature) with a squash/stretch walk bob;

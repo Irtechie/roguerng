@@ -238,6 +238,18 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("equipment swapping works", equipWorks.skip || equipWorks.changed, JSON.stringify(equipWorks).slice(0, 160));
 
+  const roundTrip = await page.evaluate(async () => {
+    const g = window.game;
+    try {
+      const b64 = await g.exportDemoGlb();
+      const res = await g.importGlbDemo(b64);
+      let fromGlb = 0;
+      g.debugAll().traverse(o => { if (o.userData && o.userData.fromGlb) fromGlb++; });
+      return { ok: res.ok && fromGlb > 0, parts: res.parts, fromGlb, sizeKB: Math.round(b64.length / 1024) };
+    } catch (e) { return { ok: false, err: String(e) }; }
+  });
+  check("voxel body exports to GLB and re-imports into the scene", roundTrip.ok, JSON.stringify(roundTrip));
+
   const mapGating = await page.evaluate(() => {
     const g = window.game;
     g.travel("ashfall", 1);

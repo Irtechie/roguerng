@@ -1,6 +1,6 @@
 # S5 - Physical stairs marker (3D structure, not a card)
 
-Status: pending | Owner: agent | Blockers: none
+Status: done | Owner: agent | Blockers: none
 Owning component: src/
 Observable outcome: at stairs cells a small raised stair-run mesh with a warm
 glow exists in the scene; visible when the cell is in view, in screenshots.

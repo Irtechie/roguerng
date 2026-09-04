@@ -1,6 +1,6 @@
 # S1 - Sticky per-character world seed
 
-Status: pending | Owner: agent | Blockers: none
+Status: done | Owner: agent | Blockers: none
 Owning component: src/ (architecture-components.json table absent)
 Observable outcome: two fresh characters see different Greenhills layouts; the
 same character's dungeon is unchanged when revisited in-session.

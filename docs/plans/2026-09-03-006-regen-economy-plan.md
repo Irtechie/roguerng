@@ -1,6 +1,6 @@
 # S6 - Regen economy: out-of-combat HP tick, no mana trickle
 
-Status: pending | Owner: agent | Blockers: none
+Status: done | Owner: agent | Blockers: none
 Owning component: src/
 Observable outcome: standing idle out of combat slowly heals; mana never rises
 except via potion, inn rest, or level-up; no refund exploit on failed casts.
