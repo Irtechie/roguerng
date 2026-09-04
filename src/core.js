@@ -50,7 +50,8 @@ export class Core {
       attrs[k] = cls.base[k] + (race.enchant[k] || 0);
     this.player = {
       name: name || "Hero", classId, raceId, level: 1, xp: 0,
-      attrs, hp: 1, mp: 0, gold: 15,
+      worldSeed: Math.floor(this.rng() * 1e9),
+      attrs, hp: 1, mp: 0, gold: 15, turnsSinceDamage: 99,
       x: 4, y: 7, mapKey: TOWN_KEY, facing: { dx: 1, dy: 0 },
       skills: [cls.skills[0]], cooldowns: {}, buffs: [],
       equipment: { weapon: starterWeapon(classId), armor: starterArmor(classId), trinket: null },
@@ -98,8 +99,9 @@ export class Core {
     }
     const [mapId, tierStr] = key.split(":");
     const def = MAPS[mapId], tier = Number(tierStr);
-    const arch = layoutArchetype(mapId, tier);
-    const { grid, floors } = generateLayout(mapId, tier, arch);
+    const worldKey = (this.player ? this.player.worldSeed : 0) + ":" + mapId;
+    const arch = layoutArchetype(worldKey, tier);
+    const { grid, floors } = generateLayout(worldKey, tier, arch);
     const rng = makeRng(hashStr(key + ":" + this.seed));
     const map = { key, kind: "dungeon", mapId, tier, arch, name: def.name, grid, floors, entities: [], stairs: null, spawn: null, w: grid[0].length, h: grid.length };
 
@@ -346,11 +348,11 @@ export class Core {
     p.cooldowns[id] = s.cd + 1;
     switch (s.kind) {
       case "melee":
-        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 0; this.say("No foe in reach.", "#ff9090"); return false; }
+        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foe in reach.", "#ff9090"); return false; }
         this.playerAttack(adj[0], 1.8);
         break;
       case "melee-all":
-        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 0; this.say("No foes in reach.", "#ff9090"); return false; }
+        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foes in reach.", "#ff9090"); return false; }
         for (const m of adj) this.playerAttack(m, s.power);
         break;
       case "self-heal": {
@@ -365,7 +367,7 @@ export class Core {
         break;
       case "bolt": {
         const t = near[0];
-        if (!t) { p.mp += s.cost; p.cooldowns[id] = 0; this.say("No target in range.", "#ff9090"); return false; }
+        if (!t) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No target in range.", "#ff9090"); return false; }
         const dmg = s.power + (s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
         t.hp -= dmg;
         this.say(`${s.name} sears ${t.name} for ${dmg}!`, "#ffb060");
@@ -375,7 +377,7 @@ export class Core {
       }
       case "multi-bolt": {
         const targets = near.slice(0, s.count);
-        if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 0; this.say("No targets in range.", "#ff9090"); return false; }
+        if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No targets in range.", "#ff9090"); return false; }
         for (const t of targets) {
           const dmg = s.power + e.int + this.rng() * 3 | 0;
           t.hp -= dmg;
@@ -522,7 +524,11 @@ export class Core {
     }
     const e = this.eff();
     p.hp = Math.min(p.hp, e.maxHp);
-    if (p.mapKey === TOWN_KEY) { p.mp = Math.min(e.maxMp, p.mp + 1); }
+    p.turnsSinceDamage++;
+    if (p.turnsSinceDamage % 5 === 0 && p.hp < e.maxHp) {
+      const nearMonster = map.entities.some(x => x.type === "monster" && x.hp > 0 && dist(x, p) <= 7);
+      if (!nearMonster) p.hp++;
+    }
   }
 
   monsterStep(m) {
@@ -546,6 +552,7 @@ export class Core {
     const p = this.player, e = this.eff();
     const dmg = Math.max(1, rand1to(this.rng, m.dmg) - rand0to(this.rng, Math.max(0, e.def)));
     p.hp -= dmg;
+    p.turnsSinceDamage = 0;
     this.say(`${m.name} hits you for ${dmg}.`, "#ff9090");
     if (p.hp <= 0) this.die(m);
   }
@@ -664,8 +671,9 @@ export class Core {
 
   layoutCount(mapId) {
     const set = new Set();
-    for (let t = 1; t <= MAPS[mapId].tiers; t++) {
-      const { grid } = generateLayout(mapId, t, layoutArchetype(mapId, t));
+    const worldKey = (this.player ? this.player.worldSeed : 0) + ":" + mapId;
+    for (let a = 0; a < 7; a++) {
+      const { grid } = generateLayout(worldKey, 1, a);
       const joined = grid.join("");
       set.add(joined.length + ":" + joined.split(".").length);
     }

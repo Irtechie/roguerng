@@ -131,6 +131,21 @@ function buildMapMeshes(map) {
     wallMesh.setMatrixAt(i, m);
   });
   mapGroup.add(wallMesh);
+
+  if (map.stairs) {
+    const stairsGroup = new THREE.Group();
+    const stepMat = new THREE.MeshStandardMaterial({ color: 0x6a5f4a, roughness: 0.9 });
+    for (let i = 0; i < 3; i++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.15), stepMat);
+      step.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h), 0.15 + i * 0.15);
+      stairsGroup.add(step);
+    }
+    const glow = new THREE.PointLight(0xffb060, 4, 4);
+    glow.position.set(wx(map.stairs.x, map.w), wy(map.stairs.y, map.h), 1.5);
+    stairsGroup.add(glow);
+    mapGroup.add(stairsGroup);
+    mapGroup.userData.stairsGroup = stairsGroup;
+  }
 }
 
 const floorLit = new THREE.Color(0x2c4436), floorDim = new THREE.Color(0x15201a);
@@ -341,6 +356,7 @@ loop();
 window.game = {
   ready: true,
   core,
+  debugScene: () => mapGroup,
   create: (c, r, n) => { core.start(c, r, n); loadedKey = null; afterAction(); return core.status(); },
   status: () => core.status(),
   act: a => core.act(a),

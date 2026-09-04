@@ -91,12 +91,63 @@ async function walkTo(page, tx, ty, limit = 300) {
   const fighterHp = s.player.maxHp;
   check("starting skill + mana model", s.player.skills.length === 1 && s.player.skills[0].id === "power-strike" && s.player.maxMp >= 4);
 
+  const regen = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    const failed = g.act({ type: "skill", slot: 0 });
+    const cd = g.status().player.skills[0].cd;
+    const mpAfterFail = g.status().player.mp;
+    c.player.hp = Math.max(1, g.status().player.maxHp - 20);
+    const hp0 = c.player.hp, mp0 = c.player.mp;
+    for (let i = 0; i < 30; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    const hpIdle = c.player.hp, mpIdle = c.player.mp;
+    const mon = c.getMap("town").entities.find(x => x.type === "monster") ||
+      { name: "dummy", dmg: 1, def: 0, hp: 1, x: c.player.x, y: c.player.y };
+    const hpBeforeHit = c.player.hp;
+    c.monsterAttack(mon);
+    c.player.turnsSinceDamage = 0;
+    const hpAfterHit = c.player.hp;
+    const tsdBefore = c.player.turnsSinceDamage;
+    for (let i = 0; i < 4; i++) c.act({ type: "move", dx: 0, dy: 0 });
+    return { failed, cd, mpAfterFail, hp0, hpIdle, mpIdle, mp0, hpBeforeHit, hpAfterHit,
+      hpFinal: c.player.hp, tsdBefore, tsdAfter: c.player.turnsSinceDamage };
+  });
+  check("failed casts charge a 2-turn cooldown, no spam-farm", regen.failed === false && regen.cd === 2);
+  check("out-of-combat HP trickles over idle turns", regen.hpIdle >= regen.hp0 + 4, `hp ${regen.hp0}->${regen.hpIdle}`);
+  check("mana does not regen per turn", regen.mpIdle === regen.mp0);
+  check("recent damage blocks regen", regen.hpAfterHit < regen.hpBeforeHit && regen.hpFinal === regen.hpAfterHit,
+    JSON.stringify({ b: regen.hpBeforeHit, a: regen.hpAfterHit, f: regen.hpFinal, t0: regen.tsdBefore, t1: regen.tsdAfter }));
+
   const layouts = await page.evaluate(() => window.game.layoutCount("greenhills"));
   check("map offers 6+ dungeon layouts over its tiers", layouts >= 6, "distinct=" + layouts);
+
+  const perChar = await page.evaluate(() => {
+    const K = window.game.core.constructor;
+    const a = new K(11), b = new K(22);
+    a.start("fighter", "human", "A"); b.start("fighter", "human", "B");
+    return {
+      seedsDiffer: a.player.worldSeed !== b.player.worldSeed,
+      gridsDiffer: a.getMap("greenhills:1").grid.join("") !== b.getMap("greenhills:1").grid.join("")
+    };
+  });
+  check("dungeons vary per character", perChar.seedsDiffer && perChar.gridsDiffer);
 
   await page.evaluate(() => window.game.travel("greenhills", 1));
   s = await page.evaluate(() => window.game.status());
   check("leaves town into village map", s.map.kind === "dungeon" && s.map.tier === 1 && s.map.name === "Greenhills Village");
+
+  const sticky = await page.evaluate(() => {
+    const g = window.game;
+    const before = g.core.getMap("greenhills:1").grid.join("");
+    g.travel("town"); g.travel("greenhills", 1);
+    return g.core.getMap("greenhills:1").grid.join("") === before;
+  });
+  check("dungeon layout sticks after first visit", sticky);
+
+  const stairMesh = await page.evaluate(() => {
+    const g = window.game.debugScene();
+    return !!g && !!g.userData.stairsGroup && g.userData.stairsGroup.children.length >= 3;
+  });
+  check("stairs are a physical 3D structure", stairMesh);
 
   const kinds = await page.evaluate(() => window.game.core.getMap("greenhills:9").monsterKinds);
   check("dungeon spawns 3-4 monster kinds", kinds.length >= 3 && kinds.length <= 4, "kinds=" + kinds.join(","));
