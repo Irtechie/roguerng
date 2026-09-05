@@ -154,7 +154,7 @@ export const MONSTERS = {
   goblin:   { name: "Goblin",        glyph: "g", color: "#60c060", icon: "caro-asercion__goblin", hp: 11, dmg: 4,  def: 1, xp: 9,  minTier: 1 },
   imp:      { name: "Ember Imp",     glyph: "i", color: "#ff7040", icon: "lorc__imp", hp: 8,  dmg: 4,  def: 0, xp: 8,  minTier: 1 },
   skeleton: { name: "Skeleton",      glyph: "Z", color: "#e0e0d0", icon: "skoll__skeleton", hp: 13, dmg: 5,  def: 2, xp: 12, minTier: 2 },
-  spider:   { name: "Fang Spider",   glyph: "x", color: "#c070c0", icon: "carl-olsen__spider-face", hp: 14, dmg: 5,  def: 1, xp: 12, minTier: 2 },
+  spider:   { name: "Fang Spider",   glyph: "x", color: "#6e5747", icon: "carl-olsen__spider-face", hp: 14, dmg: 5,  def: 1, xp: 12, minTier: 2 },
   orc:      { name: "Orc Raider",    glyph: "o", color: "#40a040", icon: "delapouite__ogre", hp: 20, dmg: 6,  def: 3, xp: 18, minTier: 3 },
   harpy:    { name: "Harpy",         glyph: "h", color: "#e0a040", icon: "lorc__harpy", hp: 18, dmg: 7,  def: 2, xp: 20, minTier: 4 },
   wraith:   { name: "Wraith",        glyph: "W", color: "#9060d0", icon: "lorc__ghost", hp: 22, dmg: 8,  def: 3, xp: 26, minTier: 5 },

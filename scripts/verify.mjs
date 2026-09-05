@@ -726,6 +726,29 @@ async function walkTo(page, tx, ty, limit = 300) {
   });
   check("GLB hero walks facing its movement direction in all 4 directions", facingWorld.ok, JSON.stringify(facingWorld));
 
+  const dollUp = await page.evaluate(() => ({
+    goblin: window.game.debugModelFor("goblin"),
+    bandit: window.game.debugModelFor("bandit"),
+    orc: window.game.debugModelFor("orc")
+  }));
+  check("goblins/orcs are tinted re-scaled dolls, not plain humans",
+    dollUp.goblin.tinted && dollUp.orc.tinted &&
+    dollUp.goblin.model === dollUp.bandit.model &&
+    dollUp.goblin.scale < dollUp.bandit.scale,
+    JSON.stringify(dollUp));
+
+  const townCast = await page.evaluate(async () => {
+    const g = window.game;
+    g.travel("town");
+    for (let i = 0; i < 40; i++) await new Promise(r => requestAnimationFrame(r));
+    const m = await import("/src/data.js");
+    const hex = m.MONSTERS.spider.color, n = s => parseInt(s, 16);
+    const r = n(hex.slice(1, 3)), gg = n(hex.slice(3, 5)), b = n(hex.slice(5, 7));
+    return { npcs: g.debugSceneModels().npcs, spiderColor: hex, purple: r > gg && b > gg };
+  });
+  check("town merchants stand as real 3D characters", townCast.npcs >= 2, JSON.stringify(townCast));
+  check("fang spiders are no longer purple", !townCast.purple, JSON.stringify(townCast));
+
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;
     g.create("fighter", "human", "Picks");

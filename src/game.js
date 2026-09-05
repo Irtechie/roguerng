@@ -541,7 +541,7 @@ function eyes(g, y, z, spread, size, color = 0xffdd44) {
   }
 }
 const EYE_POS = {
-  quadruped: [0.55, 0.44, 0.07, 0.05], spider: [0.4, 0.28, 0.05, 0.035],
+  quadruped: [0.55, 0.44, 0.07, 0.05], spider: [0.4, 0.28, 0.06, 0.04, 0xff4830],
   bat: [0.06, 0.74, 0.055, 0.04, 0xff6666], skeleton: [0.13, 0.92, 0.08, 0.05, 0x88ddff],
   float: [0.13, 1.32, 0.1, 0.055, 0xff4060], slab: [0.3, 0.6, 0.08, 0.055, 0xffa030],
   harpy: [0.14, 1.02, 0.08, 0.05], imp: [0.1, 0.64, 0.06, 0.045, 0xff5050],
@@ -584,7 +584,7 @@ const pickClip = (anims, patterns) => {
   return anims[0];
 };
 
-function modelInstance(name, height, faced) {
+function modelInstance(name, height, faced, tint) {
   const src = GLB[name];
   if (!src) return null;
   const inner = cloneSkeleton(src.scene);
@@ -593,6 +593,7 @@ function modelInstance(name, height, faced) {
   inner.traverse(o => {
     if (o.isMesh && o.material) { o.material = o.material.clone(); mats.push(o.material); }
   });
+  if (tint !== undefined) for (const m of mats) m.color.multiply(new THREE.Color(tint));
   const rotator = new THREE.Group();
   rotator.rotation.x = Math.PI / 2;
   rotator.add(inner);
@@ -606,6 +607,7 @@ function modelInstance(name, height, faced) {
   rotator.position.z = -new THREE.Box3().setFromObject(g).min.z / s;
   g.userData.model = name;
   g.userData.mats = mats;
+  g.userData.tinted = tint !== undefined;
   if (faced) g.userData.modelRoot = inner;
   if (src.animations.length) {
     const mixer = new THREE.AnimationMixer(inner);
@@ -626,10 +628,30 @@ function modelInstance(name, height, faced) {
   return g;
 }
 
+// Per-species GLB doll-up: model name + an optional material tint (multiplied
+// into every material colour) + an optional scale multiplier over the base.
+// Tints are what stop shared humanoid rigs (Rogue/Barbarian) reading as "people":
+// a slim green Rogue is a goblin, a hulking green Barbarian is an orc.
 const MONSTER_MODELS = {
-  skeleton: "Skeleton_Warrior", zombie: "Skeleton_Warrior", wendigo: "Skeleton_Warrior",
-  wraith: "Skeleton_Mage", banshee: "Skeleton_Mage",
-  bandit: "Rogue", goblin: "Barbarian", orc: "Barbarian"
+  skeleton: { model: "Skeleton_Warrior" },
+  zombie: { model: "Skeleton_Warrior", tint: 0x9fb98a },
+  wendigo: { model: "Skeleton_Warrior", tint: 0xc9d6e8, scale: 1.12 },
+  wraith: { model: "Skeleton_Mage", tint: 0x9a7fd0 },
+  banshee: { model: "Skeleton_Mage", tint: 0xbcd0ff },
+  bandit: { model: "Rogue" },
+  goblin: { model: "Rogue", tint: 0x7fc35a, scale: 0.8 },
+  orc: { model: "Barbarian", tint: 0x6fae4e, scale: 1.12 }
+};
+// Townsfolk as real characters instead of floating icons, each tinted to tell
+// them apart. The floating icon stays as a nameplate so you know who's who.
+const NPC_MODELS = {
+  innkeep: { model: "Mage", tint: 0xe0b48a },
+  merchant: { model: "Rogue", tint: 0xd8a24a },
+  elder: { model: "Mage", tint: 0xcfcfd8 },
+  warden: { model: "Knight", tint: 0x8fb4d8 },
+  foreman: { model: "Barbarian", tint: 0xc08a4a },
+  smith: { model: "Barbarian", tint: 0xc06a3a },
+  sage: { model: "Mage", tint: 0xb48fd8 }
 };
 const CLASS_MODELS = {
   fighter: "Knight", paladin: "Knight", mage: "Mage", cleric: "Mage",
@@ -654,9 +676,9 @@ const SPECIES = {
 function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly) {
   const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", s: "slime", B: "bandit", z: "zombie", c: "beetle", N: "banshee", D: "drake", "&": "troll" };
   const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
-  const modelName = proceduralOnly ? null : (MONSTER_MODELS[speciesId] || MONSTER_MODELS[byGlyph[glyph]]);
-  if (modelName && GLB[modelName]) {
-    const m = modelInstance(modelName, (known ? known.scale : 1) * (isBoss ? 1.25 : 1) * 1.25, true);
+  const mm = proceduralOnly ? null : (MONSTER_MODELS[speciesId] || MONSTER_MODELS[byGlyph[glyph]]);
+  if (mm && GLB[mm.model]) {
+    const m = modelInstance(mm.model, (known ? known.scale : 1) * (mm.scale || 1) * (isBoss ? 1.25 : 1) * 1.25, true, mm.tint);
     if (m) {
       if (known && known.shape === "float") m.userData.floats = true;
       applyShadows(m);
@@ -898,7 +920,46 @@ function rebuildEntities() {
       pool.get(key).visible = vis;
       continue;
     }
-    if (e.kind === "stairs" || e.kind === "item" || e.kind === "npc" || e.kind === "portal" || e.kind === "entrance") {
+    if (e.kind === "npc") {
+      const key = "npc:" + loadedKey + ":" + e.x + "," + e.y;
+      seen.add(key);
+      const vis = visibleSet.has(e.x + "," + e.y);
+      if (!pool.has(key)) {
+        const spec = NPC_MODELS[e.npcId];
+        const H = 1.45;
+        let g = spec && GLB[spec.model] ? modelInstance(spec.model, H, true, spec.tint) : null;
+        if (g) {
+          addBlobShadow(g, 0.42);
+          applyShadows(g);
+          const plate = sprite(e, 0.5);
+          plate.scale.multiplyScalar(1 / g.scale.x);
+          plate.position.set(0, 0, (H + 0.42) / g.scale.x);
+          g.add(plate);
+          g.userData.npc = true;
+          g.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0);
+        } else {
+          g = sprite(e, 0.9);
+          g.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0.7);
+        }
+        entityGroup.add(g);
+        pool.set(key, g);
+      }
+      const o = pool.get(key);
+      if (o) {
+        o.visible = vis;
+        if (o.userData.npc && playerSprite) {
+          const dx = playerSprite.position.x - o.position.x;
+          const dy = playerSprite.position.y - o.position.y;
+          if (Math.abs(dx) + Math.abs(dy) > 0.01) {
+            let d = facingYaw(dx, -dy) - o.rotation.z;
+            d = Math.atan2(Math.sin(d), Math.cos(d));
+            o.rotation.z += d * 0.12;
+          }
+        }
+      }
+      continue;
+    }
+    if (e.kind === "stairs" || e.kind === "item" || e.kind === "portal" || e.kind === "entrance") {
       const key = "card:" + loadedKey + ":" + e.kind + ":" + e.x + "," + e.y;
       seen.add(key);
       if (!pool.has(key) && visibleSet.has(e.x + "," + e.y)) {
@@ -1380,7 +1441,7 @@ window.game = {
   },
   debugModelFor: id => {
     const g = makeVoxel(id, "", "#888888");
-    return { model: g.userData.model || null, animated: !!g.userData.mixer };
+    return { model: g.userData.model || null, animated: !!g.userData.mixer, tinted: !!g.userData.tinted, scale: +(g.scale.x).toFixed(2) };
   },
   heroBoneNames: () => {
     const root = playerSprite?.userData.modelRoot;
@@ -1403,13 +1464,15 @@ window.game = {
   },
   debugSceneModels: () => {
     const names = [];
-    let hero = null, animated = 0, meshes = 0;
+    let hero = null, animated = 0, meshes = 0, npcs = 0, tinted = 0;
     if (playerSprite?.userData.model) { hero = playerSprite.userData.model; if (playerSprite.userData.mixer) animated++; }
     for (const g of pool.values()) {
+      if (g.userData.npc) npcs++;
+      if (g.userData.tinted) tinted++;
       if (g.userData.model) { names.push(g.userData.model); if (g.userData.mixer) animated++; }
       g.traverse(o => { if (o.isMesh) meshes++; });
     }
-    return { hero, sceneModels: names, animated, meshes };
+    return { hero, sceneModels: names, animated, meshes, npcs, tinted };
   },
   toggleMap: () => { mapOpen = !mapOpen; mmCanvas.style.display = mapOpen ? "block" : "none"; drawMinimap(); return mapOpen; },
   clickTile,
