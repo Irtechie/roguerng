@@ -20,7 +20,7 @@ export const CLASSES = {
     base: { str: 7, int: 14, wis: 11, dex: 10, vit: 8 },
     growth: { int: 1, wis: 1, other: 0.5 },
     hpPer: 2, mpPer: 6, hpBase: 0,
-    skills: ["firebolt", "identify", "frost-shock", "arcane-barrier", "chain-lightning"],
+    skills: ["firebolt", "identify", "frost-shock", "arcane-barrier", "chain-lightning", "elemental-ward"],
     weapons: ["staff", "dagger", "wand"], armors: ["rags", "robes"],
     blurb: "Tiny spells and low mana at first. Devastating once fed. Staves and daggers, robes only. Knows Identify."
   },
@@ -29,7 +29,7 @@ export const CLASSES = {
     base: { str: 9, int: 9, wis: 14, dex: 8, vit: 11 },
     growth: { wis: 1, vit: 1, other: 0.5 },
     hpPer: 4, mpPer: 3, hpBase: 3,
-    skills: ["heal", "blessing", "smite", "divine-shield"],
+    skills: ["heal", "blessing", "smite", "elemental-ward", "divine-shield"],
     weapons: ["sickle", "mace", "warhammer"], armors: ["rags", "robes", "leather", "chain"],
     blurb: "Heals self, blesses, smites. Blunt holy weapons, no plate."
   },
@@ -47,7 +47,7 @@ export const CLASSES = {
     base: { str: 12, int: 8, wis: 11, dex: 8, vit: 12 },
     growth: { str: 1, wis: 1, vit: 1, other: 0.4 },
     hpPer: 5, mpPer: 3, hpBase: 4,
-    skills: ["lay-on-hands", "holy-smite", "divine-favor", "aura-of-courage"],
+    skills: ["lay-on-hands", "holy-smite", "divine-favor", "elemental-ward", "aura-of-courage"],
     weapons: ["mace", "warhammer", "shortsword", "spear", "longsword", "greataxe", "runesblade"],
     armors: ["rags", "leather", "studded", "chain", "plate"],
     blurb: "Holy warrior: lays on hands, smites evil, and wears the heaviest plate in the realm."
@@ -89,7 +89,8 @@ export const SKILLS = {
   "aimed-shot":    { name: "Aimed Shot",    level: 1, cost: 4,  cd: 2,  kind: "bolt", power: 6, range: 7, dex: true, desc: "Ranged shot: 6 + DEX damage." },
   "natures-whisper":{ name: "Nature's Whisper", level: 3, cost: 5, cd: 4, kind: "self-heal", power: 0.2, wis: true, desc: "Heal 20% max HP + WIS." },
   "hunters-mark":  { name: "Hunter's Mark", level: 4, cost: 4,  cd: 6,  kind: "buff", buff: { atk: 3, turns: 5 }, desc: "Mark your prey: ATK +3 for 5 turns." },
-  "volley":        { name: "Volley",        level: 5, cost: 8,  cd: 5,  kind: "multi-bolt", power: 7, range: 6, count: 2, dex: true, desc: "7 + DEX damage to up to 2 foes." }
+  "volley":        { name: "Volley",        level: 5, cost: 8,  cd: 5,  kind: "multi-bolt", power: 7, range: 6, count: 2, dex: true, desc: "7 + DEX damage to up to 2 foes." },
+  "elemental-ward":{ name: "Elemental Ward", level: 6, cost: 7, cd: 9,  kind: "buff", buff: { allRes: 2, turns: 14 }, desc: "All elemental resistance +2 for 14 turns." }
 };
 
 // Spellbooks teach their skill to any class at the required level.
@@ -99,7 +100,8 @@ export const SPELLBOOKS = {
   "book-smite":  { name: "Book of Divine Smite",  teaches: "smite",          reqLevel: 4, glyph: "=", color: "#fff0a0", icon: "delapouite__spell-book" },
   "book-barrier":{ name: "Book of Arcane Barrier",teaches: "arcane-barrier", reqLevel: 4, glyph: "=", color: "#a0ffd8", icon: "delapouite__spell-book" },
   "book-heal":   { name: "Book of Healing",     teaches: "heal",   reqLevel: 2, glyph: "=", color: "#c8ffc8", icon: "delapouite__spell-book" },
-  "book-volley": { name: "Book of Volley",      teaches: "volley", reqLevel: 5, glyph: "=", color: "#ffd8a0", icon: "delapouite__spell-book" }
+  "book-volley": { name: "Book of Volley",      teaches: "volley", reqLevel: 5, glyph: "=", color: "#ffd8a0", icon: "delapouite__spell-book" },
+  "book-ward":   { name: "Book of Warding",     teaches: "elemental-ward", reqLevel: 6, glyph: "=", color: "#b0ffd8", icon: "delapouite__spell-book" }
 };
 
 export const WEAPONS = [
@@ -135,17 +137,60 @@ export const TRINKETS = [
   { id: "starcirclet", name: "Star Circlet", tier: 8, icon: "delapouite__jewel-crown" }
 ];
 
+// Protection gear sold in town: fixed resistance affixes for themed floors.
+export const WARD_ITEMS = [
+  { id: "ring-warmth", name: "Ring of Warmth", element: "fire", value: 3, tier: 3, icon: "delapouite__diamond-ring" },
+  { id: "ring-frostward", name: "Frostward Ring", element: "frost", value: 3, tier: 3, icon: "delapouite__double-necklace" },
+  { id: "bark-brooch", name: "Barkwood Brooch", element: "acid", value: 3, tier: 4, icon: "delapouite__feather-necklace" },
+  { id: "storm-totem", name: "Storm Totem", element: "storm", value: 3, tier: 5, icon: "delapouite__diamond-ring" },
+  { id: "veil-eclipse", name: "Veil of Eclipse", element: "shadow", value: 3, tier: 5, icon: "delapouite__double-necklace" }
+];
+
 // Enchantment affixes: blessings add, curses subtract (cursed gear keeps a stronger base).
 export const BLESSINGS = [
   { key: "str", name: "Might" }, { key: "dex", name: "Grace" }, { key: "vit", name: "the Bear" },
   { key: "int", name: "Focus" }, { key: "wis", name: "Insight" }, { key: "atk", name: "the Titan" },
-  { key: "def", name: "the Aegis" }, { key: "hp", name: "Vigor" }, { key: "mp", name: "Reservoir" }
+  { key: "def", name: "the Aegis" }, { key: "hp", name: "Vigor" }, { key: "mp", name: "Reservoir" },
+  { key: "fireRes", name: "the Salamander" }, { key: "frostRes", name: "the Yeti" },
+  { key: "acidRes", name: "the Toad" }, { key: "stormRes", name: "the Tempest" },
+  { key: "shadowRes", name: "the Eclipse" }
 ];
 export const CURSES = [
   { key: "str", name: "Frailty" }, { key: "dex", name: "Clumsiness" }, { key: "vit", name: "Withering" },
   { key: "int", name: "Dimming" }, { key: "wis", name: "Doubt" }, { key: "def", name: "Exposure" },
   { key: "hp", name: "Fragility" }, { key: "mp", name: "Hollowness" }
 ];
+
+// Elemental variants: themed dungeon floors prefix+tint base creatures, so a
+// Fire Ant or Frost Skeleton is the same rig/shape with an element tag. Their
+// attacks burn through the matching resistance (gear affix, Ward spell, buffs).
+export const ELEMENTS = {
+  none:   { name: "Unbound", prefix: "",       color: null,     tint: 0xffffff, res: null,         hp: 1.0,  xp: 1.0,  bonus: 0 },
+  fire:   { name: "Fire",    prefix: "Fire ",   color: "#ff7040", tint: 0xff7850, res: "fireRes",   hp: 1.05, xp: 1.25, bonus: 3 },
+  frost:  { name: "Frost",   prefix: "Frost ",  color: "#8fd0ff", tint: 0x9fd0ff, res: "frostRes",  hp: 1.08, xp: 1.25, bonus: 3 },
+  acid:   { name: "Acid",    prefix: "Acid ",   color: "#90e050", tint: 0x9ae066, res: "acidRes",   hp: 1.06, xp: 1.2,  bonus: 3 },
+  storm:  { name: "Storm",   prefix: "Storm ",  color: "#ffd860", tint: 0xffe080, res: "stormRes",  hp: 1.0,  xp: 1.25, bonus: 4 },
+  shadow: { name: "Shadow",  prefix: "Shadow ", color: "#9a6ad0", tint: 0x9a72c8, res: "shadowRes", hp: 1.1,  xp: 1.3,  bonus: 3 }
+};
+
+// Bestiary families group species for the compendium ("the frozen mountains"
+// style browsing by kind rather than 300 flat rows).
+export const FAMILIES = {
+  rat: "vermin", bat: "vermin", bloodbat: "vermin", direrat: "vermin", ant: "vermin", spider: "vermin",
+  centipede: "vermin", scorpion: "vermin", beetle: "vermin", stalker: "vermin", snake: "vermin",
+  wolf: "beast", direwolf: "beast", bear: "beast", boar: "beast", gnoll: "beast", hellhound: "beast",
+  goblin: "humanoid", kobold: "humanoid", orc: "humanoid", bugbear: "humanoid", ogre: "humanoid",
+  ogrmage: "humanoid", ettin: "humanoid", bandit: "humanoid", werewolf: "humanoid", harpy: "humanoid",
+  skeleton: "undead", zombie: "undead", ghoul: "undead", ghast: "undead", wight: "undead",
+  mummy: "undead", wraith: "undead", specter: "undead", shade: "undead", banshee: "undead",
+  vampire: "undead", vamlord: "undead", lich: "undead", draugr: "undead", shadow: "undead",
+  slime: "slime", magma: "slime", gianttoad: "slime", giant: "giant", hillgiant: "giant",
+  firegiant: "giant", frostgiant: "giant", cloudgiant: "giant", troll: "giant", wendigo: "giant",
+  imp: "elemental", elemental: "elemental", fireelem: "elemental", fireant: "elemental",
+  stonegolem: "constructed", irongolem: "constructed", gargoyle: "constructed",
+  manticore: "magical", chimera: "magical", basilisk: "magical", cockatrice: "magical",
+  hydra: "magical", minotaur: "magical", drake: "dragon", wyrm: "dragon", archfiend: "fiend"
+};
 
 export const MONSTERS = {
   rat:      { name: "Giant Rat",     glyph: "r", color: "#b08060", icon: "delapouite__rat", hp: 6,  dmg: 3,  def: 0, xp: 5,  minTier: 1 },
@@ -167,7 +212,60 @@ export const MONSTERS = {
   zombie:   { name: "Rotting Zombie", glyph: "z", color: "#7a9a5a", icon: "delapouite__elysium-shade", hp: 16, dmg: 5, def: 1, xp: 13, minTier: 2 },
   beetle:   { name: "Ironback Beetle", glyph: "c", color: "#40a080", icon: "carl-olsen__spider-face", hp: 17, dmg: 6, def: 4, xp: 16, minTier: 3 },
   banshee:  { name: "Wailing Banshee", glyph: "N", color: "#a0c8ff", icon: "lorc__ghost", hp: 24, dmg: 9, def: 3, xp: 28, minTier: 5 },
-  drake:    { name: "Cinder Drake",  glyph: "D", color: "#d04828", icon: "lorc__wolf-head", hp: 30, dmg: 10, def: 5, xp: 38, minTier: 6 }
+  drake:    { name: "Cinder Drake",  glyph: "D", color: "#d04828", icon: "lorc__wolf-head", hp: 30, dmg: 10, def: 5, xp: 38, minTier: 6 },
+  // --- classic bestiary expansion (folklore roots; tiers 1-12 ladder to level 100) ---
+  kobold:   { name: "Kobold",        glyph: "k", color: "#c07048", icon: "caro-asercion__goblin", hp: 7, dmg: 3, def: 0, xp: 6, minTier: 1 },
+  bloodbat: { name: "Blood Bat",     glyph: "t", color: "#a03030", icon: "delapouite__bat", hp: 6, dmg: 2, def: 0, xp: 5, minTier: 1 },
+  direrat:  { name: "Dire Rat",      glyph: "R", color: "#8a6a55", icon: "delapouite__rat", hp: 12, dmg: 4, def: 1, xp: 10, minTier: 1 },
+  gnoll:    { name: "Gnoll Reaver",  glyph: "n", color: "#b08858", icon: "lorc__wolf-head", hp: 15, dmg: 6, def: 2, xp: 14, minTier: 2 },
+  ghoul:    { name: "Ghoul",         glyph: "G", color: "#9aa08a", icon: "delapouite__elysium-shade", hp: 17, dmg: 6, def: 1, xp: 15, minTier: 2 },
+  gianttoad:{ name: "Giant Toad",    glyph: "d", color: "#6a8a3a", icon: "sbed__lava", hp: 16, dmg: 5, def: 2, xp: 13, minTier: 2 },
+  shadow:   { name: "Shadow",        glyph: "s", color: "#3a3a4a", icon: "lorc__ghost", hp: 24, dmg: 9, def: 5, xp: 30, minTier: 3 },
+  bugbear:  { name: "Bugbear",       glyph: "U", color: "#9a7f55", icon: "delapouite__ogre", hp: 22, dmg: 7, def: 3, xp: 20, minTier: 3 },
+  ogre:     { name: "Ogre",          glyph: "O", color: "#9aa06a", icon: "delapouite__ogre", hp: 28, dmg: 8, def: 3, xp: 24, minTier: 3 },
+  scorpion: { name: "Giant Scorpion", glyph: "S", color: "#c09048", icon: "carl-olsen__spider-face", hp: 20, dmg: 7, def: 4, xp: 19, minTier: 3 },
+  wight:    { name: "Wight",         glyph: "h", color: "#7080a0", icon: "skoll__skeleton", hp: 21, dmg: 7, def: 3, xp: 21, minTier: 4 },
+  werewolf: { name: "Werewolf",      glyph: "V", color: "#6a7078", icon: "lorc__wolf-head", hp: 26, dmg: 9, def: 3, xp: 26, minTier: 4 },
+  ettin:    { name: "Ettin",         glyph: "E", color: "#8a7a5a", icon: "skoll__troll", hp: 32, dmg: 9, def: 4, xp: 30, minTier: 4 },
+  cockatrice:{ name: "Cockatrice",   glyph: "C", color: "#b0a060", icon: "lorc__harpy", hp: 19, dmg: 7, def: 3, xp: 22, minTier: 4 },
+  centipede:{ name: "Giant Centipede", glyph: "p", color: "#a0783a", icon: "carl-olsen__spider-face", hp: 21, dmg: 8, def: 4, xp: 23, minTier: 4 },
+  gargoyle: { name: "Gargoyle",      glyph: "g", color: "#8a8a92", icon: "delapouite__gargoyle", hp: 30, dmg: 9, def: 6, xp: 32, minTier: 5 },
+  specter:  { name: "Specter",       glyph: "P", color: "#8898b0", icon: "lorc__ghost", hp: 24, dmg: 9, def: 4, xp: 30, minTier: 5 },
+  mummy:    { name: "Mummy",         glyph: "M", color: "#d8cba8", icon: "delapouite__elysium-shade", hp: 34, dmg: 9, def: 4, xp: 34, minTier: 5 },
+  ogrmage:  { name: "Ogre Mage",     glyph: "Q", color: "#9a6ab0", icon: "delapouite__ogre", hp: 30, dmg: 10, def: 4, xp: 33, minTier: 5 },
+  direwolf: { name: "Dire Wolf",     glyph: "W", color: "#586068", icon: "lorc__wolf-head", hp: 26, dmg: 9, def: 3, xp: 30, minTier: 5 },
+  minotaur: { name: "Minotaur",      glyph: "m", color: "#7a5a3a", icon: "lorc__minotaur", hp: 38, dmg: 11, def: 5, xp: 40, minTier: 6 },
+  basilisk: { name: "Basilisk",      glyph: "B", color: "#5a8a4a", icon: "lorc__wolf-head", hp: 32, dmg: 11, def: 6, xp: 42, minTier: 6 },
+  hellhound:{ name: "Hell Hound",    glyph: "l", color: "#d04820", icon: "lorc__wolf-head", hp: 28, dmg: 10, def: 4, xp: 36, minTier: 6 },
+  chimera:  { name: "Chimera",       glyph: "X", color: "#a06a3a", icon: "lorc__minotaur", hp: 42, dmg: 12, def: 5, xp: 46, minTier: 7 },
+  fireelem: { name: "Fire Elemental", glyph: "f", color: "#ff6820", icon: "sbed__lava", hp: 36, dmg: 12, def: 4, xp: 44, minTier: 7 },
+  stonegolem:{ name: "Stone Golem",  glyph: "o", color: "#9a9a9a", icon: "delapouite__golem-head", hp: 46, dmg: 11, def: 7, xp: 50, minTier: 7 },
+  hillgiant:{ name: "Hill Giant",    glyph: "i", color: "#c0b088", icon: "skoll__troll", hp: 44, dmg: 12, def: 6, xp: 48, minTier: 7 },
+  manticore:{ name: "Manticore",     glyph: "a", color: "#c08048", icon: "lorc__minotaur", hp: 40, dmg: 13, def: 6, xp: 52, minTier: 8 },
+  frostworm:{ name: "Frost Worm",    glyph: "F", color: "#a8c8e0", icon: "delapouite__ice-golem", hp: 48, dmg: 13, def: 6, xp: 56, minTier: 8 },
+  ghast:    { name: "Ghast",         glyph: "A", color: "#b8a8a0", icon: "delapouite__elysium-shade", hp: 40, dmg: 12, def: 5, xp: 58, minTier: 9 },
+  vampire:  { name: "Vampire",       glyph: "e", color: "#b04050", icon: "lorc__imp", hp: 46, dmg: 13, def: 6, xp: 64, minTier: 9 },
+  firegiant:{ name: "Fire Giant",    glyph: "I", color: "#c04830", icon: "skoll__troll", hp: 56, dmg: 14, def: 7, xp: 66, minTier: 9 },
+  draugr:   { name: "Draugr",        glyph: "j", color: "#5a7080", icon: "skoll__skeleton", hp: 58, dmg: 14, def: 7, xp: 70, minTier: 9 },
+  lich:     { name: "Lich",          glyph: "L", color: "#bcd8c8", icon: "skoll__skeleton", hp: 52, dmg: 15, def: 7, xp: 72, minTier: 10 },
+  frostgiant:{ name: "Frost Giant",  glyph: "J", color: "#9fc4e0", icon: "skoll__troll", hp: 62, dmg: 15, def: 7, xp: 76, minTier: 10 },
+  hydra:    { name: "Hydra",         glyph: "y", color: "#4a8a5a", icon: "lorc__wolf-head", hp: 60, dmg: 14, def: 6, xp: 74, minTier: 10 },
+  irongolem:{ name: "Iron Golem",    glyph: "N", color: "#b0b8c0", icon: "delapouite__golem-head", hp: 70, dmg: 15, def: 9, xp: 84, minTier: 11 },
+  vamlord:  { name: "Vampire Lord",  glyph: "w", color: "#8a233a", icon: "lorc__imp", hp: 60, dmg: 16, def: 7, xp: 88, minTier: 11 },
+  stalker:  { name: "Silent Stalker", glyph: "u", color: "#7a6a8a", icon: "carl-olsen__spider-face", hp: 54, dmg: 15, def: 6, xp: 80, minTier: 11 },
+  cloudgiant:{ name: "Cloud Giant",  glyph: "c", color: "#d8e0e8", icon: "skoll__troll", hp: 80, dmg: 17, def: 8, xp: 95, minTier: 12 },
+  archfiend:{ name: "Archfiend",     glyph: "z", color: "#e02020", icon: "lorc__imp", hp: 88, dmg: 18, def: 8, xp: 105, minTier: 12, unique: true },
+  wyrm:     { name: "Ancient Wyrm",  glyph: "d", color: "#e03010", icon: "lorc__wolf-head", hp: 100, dmg: 19, def: 9, xp: 120, minTier: 12, unique: true },
+  // --- variant-able bases: these become Fire/Frost/Acid/Storm/Shadow X on themed floors ---
+  ant:      { name: "Wood Ant",      glyph: "a", color: "#7a5a40", icon: "delapouite__rat", hp: 5, dmg: 2, def: 0, xp: 4, minTier: 1 },
+  snake:    { name: "Crypt Snake",   glyph: "s", color: "#6a8a50", icon: "lorc__wolf-head", hp: 12, dmg: 6, def: 1, xp: 12, minTier: 2 },
+  boar:     { name: "Tusked Boar",   glyph: "b", color: "#8a6a4a", icon: "delapouite__boar-head", hp: 17, dmg: 5, def: 2, xp: 13, minTier: 2 },
+  bear:     { name: "Cave Bear",     glyph: "b", color: "#7a6248", icon: "lorc__wolf-head", hp: 26, dmg: 8, def: 3, xp: 22, minTier: 3 },
+  worm:     { name: "Cave Worm",     glyph: "m", color: "#a08070", icon: "carl-olsen__spider-face", hp: 18, dmg: 7, def: 3, xp: 18, minTier: 4 },
+  elemental:{ name: "Elemental",     glyph: "e", color: "#9ab0c8", icon: "sbed__lava", hp: 34, dmg: 11, def: 4, xp: 40, minTier: 6 },
+  giant:    { name: "Stone Giant",   glyph: "g", color: "#b0a890", icon: "skoll__troll", hp: 44, dmg: 12, def: 6, xp: 48, minTier: 7 },
+  lich:     { name: "Lich",          glyph: "L", color: "#bcd8c8", icon: "skoll__skeleton", hp: 52, dmg: 15, def: 7, xp: 72, minTier: 10, unique: true },
+  vamlord:  { name: "Vampire Lord",  glyph: "w", color: "#8a233a", icon: "lorc__imp", hp: 60, dmg: 16, def: 7, xp: 88, minTier: 11, unique: true }
 };
 
 export const BOSSES = {
@@ -180,7 +278,9 @@ export const MAPS = {
   greenhills: {
     name: "Greenhills Village", layouts: 7, tiers: 12, unlockLevel: 1,
     difficulty: 1.0, lootShift: 0,
-    monsters: ["rat", "bat", "wolf", "goblin", "skeleton", "spider", "slime", "bandit", "zombie"],
+    elements: ["acid", "storm"], elemFrom: 5,
+    monsters: ["rat", "bat", "wolf", "goblin", "skeleton", "spider", "slime", "bandit", "zombie",
+               "kobold", "bloodbat", "direrat", "ant", "boar", "gnoll", "ghoul", "snake", "bear"],
     boss: "greenpaw",
     quest: {
       id: "hearthroot", npc: "elder", item: "hearthroot", itemName: "Hearthroot",
@@ -192,7 +292,9 @@ export const MAPS = {
   darkfang: {
     name: "Darkfang Forest", layouts: 7, tiers: 12, unlockLevel: 4,
     difficulty: 1.5, lootShift: 4,
-    monsters: ["goblin", "skeleton", "orc", "harpy", "wraith", "shade", "troll", "wendigo", "bandit", "zombie", "beetle", "banshee"],
+    elements: ["frost", "shadow"], elemFrom: 3,
+    monsters: ["goblin", "skeleton", "orc", "harpy", "wraith", "shade", "troll", "wendigo", "bandit", "zombie", "beetle", "banshee",
+               "shadow", "bugbear", "ogre", "scorpion", "wight", "werewolf", "ettin", "centipede", "gargoyle", "specter", "snake", "direwolf", "worm"],
     boss: "hagraven",
     quest: {
       id: "token", npc: "warden", item: "token", itemName: "Hagraven Token",
@@ -204,7 +306,10 @@ export const MAPS = {
   ashfall: {
     name: "Ashfall Mine", layouts: 7, tiers: 12, unlockLevel: 8,
     difficulty: 2.1, lootShift: 8,
-    monsters: ["imp", "skeleton", "spider", "orc", "magma", "wraith", "troll", "wendigo", "slime", "beetle", "drake", "banshee"],
+    elements: ["fire", "fire", "storm"], elemFrom: 2,
+    monsters: ["imp", "skeleton", "spider", "orc", "magma", "wraith", "troll", "wendigo", "slime", "beetle", "drake", "banshee",
+               "hellhound", "basilisk", "minotaur", "chimera", "manticore", "stonegolem", "hillgiant", "cockatrice", "fireelem",
+               "vampire", "ghast", "draugr", "ogre", "scorpion", "hydra", "lich", "frostgiant", "irongolem", "vamlord", "worm"],
     boss: "cinder",
     quest: {
       id: "ore", npc: "foreman", item: "ore", itemName: "Ember-Ore Seam",
@@ -214,6 +319,18 @@ export const MAPS = {
     }
   }
 };
+
+// Deterministic themed floors: a deep floor of a map is mostly one element.
+// Hash keeps dungeon gen, loot bias, HUD, and verify agreeing without rng drift.
+export function floorElement(mapId, tier) {
+  const def = MAPS[mapId];
+  if (!def || !def.elements || tier < (def.elemFrom ?? 99)) return "none";
+  let h = 2166136261;
+  const s = `${mapId}#${tier}`;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  const pool = ["none", ...def.elements, ...def.elements]; // element floors dominate
+  return pool[h % pool.length];
+}
 
 export const QUEST_ITEM_NAMES = { hearthroot: "Hearthroot", token: "Hagraven Token", ore: "Ember-Ore Seam" };
 
@@ -240,6 +357,12 @@ export const SHOP = [
   { key: "armor:studded", name: "Studded Leather", price: 170, vendor: "smith" },
   { key: "armor:chain", name: "Chainmail", price: 260, vendor: "smith" },
   { key: "armor:plate", name: "Plate Armor", price: 480, vendor: "smith" },
+  { key: "trinket:ring-warmth", name: "Ring of Warmth (fire resist)", price: 110, vendor: "merchant" },
+  { key: "trinket:ring-frostward", name: "Frostward Ring (frost resist)", price: 110, vendor: "merchant" },
+  { key: "trinket:bark-brooch", name: "Barkwood Brooch (acid resist)", price: 130, vendor: "sage" },
+  { key: "trinket:storm-totem", name: "Storm Totem (storm resist)", price: 150, vendor: "sage" },
+  { key: "trinket:veil-eclipse", name: "Veil of Eclipse (shadow resist)", price: 150, vendor: "sage" },
+  { key: "book:book-ward", name: "Book of Warding", price: 190, vendor: "sage" },
   { key: "book:book-frost", name: "Book of Frost Shock", price: 180, vendor: "sage" },
   { key: "book:book-heal", name: "Book of Healing", price: 160, vendor: "sage" },
   { key: "book:book-smite", name: "Book of Divine Smite", price: 220, vendor: "sage" },

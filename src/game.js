@@ -640,7 +640,33 @@ const MONSTER_MODELS = {
   banshee: { model: "Skeleton_Mage", tint: 0xbcd0ff },
   bandit: { model: "Rogue" },
   goblin: { model: "Rogue", tint: 0x7fc35a, scale: 0.8 },
-  orc: { model: "Barbarian", tint: 0x6fae4e, scale: 1.12 }
+  orc: { model: "Barbarian", tint: 0x6fae4e, scale: 1.12 },
+  kobold: { model: "Rogue", tint: 0xc8794a, scale: 0.68 },
+  bugbear: { model: "Rogue", tint: 0x8f9a5a, scale: 0.95 },
+  gnoll: { model: "Barbarian", tint: 0xc8a86a, scale: 0.95 },
+  ogre: { model: "Barbarian", tint: 0x9aa46a, scale: 1.3 },
+  ogrmage: { model: "Mage", tint: 0x9aa46a, scale: 1.15 },
+  ettin: { model: "Barbarian", tint: 0xd07a5a, scale: 1.5 },
+  ghoul: { model: "Skeleton_Warrior", tint: 0x8aa06a },
+  ghast: { model: "Skeleton_Warrior", tint: 0xa8bd8a },
+  wight: { model: "Skeleton_Warrior", tint: 0x6a86a8 },
+  mummy: { model: "Skeleton_Warrior", tint: 0xd8cba0 },
+  draugr: { model: "Skeleton_Warrior", tint: 0x6a9a9a },
+  specter: { model: "Skeleton_Mage", tint: 0x9fc8d8 },
+  lich: { model: "Skeleton_Mage", tint: 0xa8e0c8 },
+  vampire: { model: "Rogue", tint: 0x9a3a4a },
+  vamlord: { model: "Rogue", tint: 0x8a233a, scale: 1.1 },
+  werewolf: { model: "Barbarian", tint: 0x8a8a96, scale: 1.2 },
+  minotaur: { model: "Barbarian", tint: 0x6a4a3a, scale: 1.35 },
+  gargoyle: { model: "Barbarian", tint: 0x5a5a6a, scale: 0.9 },
+  stonegolem: { model: "Barbarian", tint: 0x9a9a9a, scale: 1.6 },
+  irongolem: { model: "Barbarian", tint: 0x8a94a8, scale: 1.6 },
+  giant: { model: "Barbarian", tint: 0xb0a890, scale: 1.8 },
+  hillgiant: { model: "Barbarian", tint: 0xb8a080, scale: 1.9 },
+  firegiant: { model: "Barbarian", tint: 0xd06030, scale: 1.9 },
+  frostgiant: { model: "Barbarian", tint: 0xa8c8e8, scale: 1.9 },
+  cloudgiant: { model: "Barbarian", tint: 0xd8e0e8, scale: 2.0 },
+  archfiend: { model: "Barbarian", tint: 0xc03030, scale: 1.5 }
 };
 // Townsfolk as real characters instead of floating icons, each tinted to tell
 // them apart. The floating icon stays as a nameplate so you know who's who.
@@ -670,15 +696,36 @@ const SPECIES = {
   zombie: { shape: "biped", scale: 1.02 }, beetle: { shape: "spider", scale: 0.7 },
   banshee: { shape: "float", scale: 1.05 }, drake: { shape: "quadruped", scale: 1.15 },
   greenpaw: { shape: "brute", scale: 1.7 }, hagraven: { shape: "harpy", scale: 1.5 },
-  cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 }
+  cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 },
+  ant: { shape: "quadruped", scale: 0.35 }, bloodbat: { shape: "bat", scale: 0.55 },
+  direrat: { shape: "quadruped", scale: 0.7 }, snake: { shape: "spider", scale: 0.5 },
+  boar: { shape: "quadruped", scale: 1.0 }, bear: { shape: "quadruped", scale: 1.35 },
+  worm: { shape: "spider", scale: 0.65 }, frostworm: { shape: "spider", scale: 0.8 },
+  centipede: { shape: "spider", scale: 0.6 }, scorpion: { shape: "spider", scale: 0.8 },
+  stalker: { shape: "spider", scale: 0.95 }, gianttoad: { shape: "quadruped", scale: 0.8 },
+  shadow: { shape: "float", scale: 0.9 }, specter: { shape: "float", scale: 1.0 },
+  wight: { shape: "biped", scale: 0.95 }, ghoul: { shape: "biped", scale: 0.9 },
+  ogrmage: { shape: "biped", scale: 1.1 }, direwolf: { shape: "quadruped", scale: 1.25 },
+  hellhound: { shape: "quadruped", scale: 1.1 }, cockatrice: { shape: "quadruped", scale: 0.8 },
+  basilisk: { shape: "quadruped", scale: 1.1 }, chimera: { shape: "quadruped", scale: 1.25 },
+  manticore: { shape: "quadruped", scale: 1.2 }, hydra: { shape: "quadruped", scale: 1.35 },
+  wyrm: { shape: "quadruped", scale: 1.7 }, elemental: { shape: "float", scale: 1.1 },
+  fireelem: { shape: "float", scale: 1.05 }
 };
 
-function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly) {
+function mergeTint(a, b) {
+  if (a == null && b == null) return undefined;
+  const c = new THREE.Color(a == null ? 0xffffff : a);
+  if (b != null) c.multiply(new THREE.Color(b));
+  return c.getHex();
+}
+
+function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly, elemTint) {
   const byGlyph = { r: "rat", b: "bat", w: "wolf", g: "goblin", i: "imp", Z: "skeleton", x: "spider", o: "orc", h: "harpy", W: "wraith", m: "magma", U: "shade", T: "troll", Y: "wendigo", s: "slime", B: "bandit", z: "zombie", c: "beetle", N: "banshee", D: "drake", "&": "troll" };
   const known = SPECIES[speciesId] || SPECIES[byGlyph[glyph]];
   const mm = proceduralOnly ? null : (MONSTER_MODELS[speciesId] || MONSTER_MODELS[byGlyph[glyph]]);
   if (mm && GLB[mm.model]) {
-    const m = modelInstance(mm.model, (known ? known.scale : 1) * (mm.scale || 1) * (isBoss ? 1.25 : 1) * 1.25, true, mm.tint);
+    const m = modelInstance(mm.model, (known ? known.scale : 1) * (mm.scale || 1) * (isBoss ? 1.25 : 1) * 1.25, true, mergeTint(mm.tint, elemTint));
     if (m) {
       if (known && known.shape === "float") m.userData.floats = true;
       applyShadows(m);
@@ -983,7 +1030,7 @@ function rebuildEntities() {
     seen.add(key);
     const vis = visibleSet.has(e.x + "," + e.y);
     if (!pool.has(key)) {
-      const g = makeVoxel(e.monsterId, e.glyph, e.color, e.isBoss);
+      const g = makeVoxel(e.monsterId, e.glyph, e.color, e.isBoss, false, e.tint || undefined);
       addBlobShadow(g, 0.4);
       applyShadows(g);
       g.userData.bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.07),
@@ -993,11 +1040,12 @@ function rebuildEntities() {
       g.add(g.userData.bar);
       g.userData.bar.position.set(0, 0, 1.5);
       g.position.set(wx(e.x, mapDims.w), wy(e.y, mapDims.h), 0);
-      if (e.facing) g.rotation.z = Math.atan2(-e.facing.dx, e.facing.dy);
+      if (e.facing) g.rotation.z = facingYaw(e.facing.dx, e.facing.dy);
       pool.set(key, g);
     }
     const g = pool.get(key);
     g.visible = vis;
+    if (vis && e.monsterId) core.noteSighting(e.monsterId, e.element);
     if (!vis) continue;
     const tx = wx(e.x, mapDims.w), ty = wy(e.y, mapDims.h);
     const step = Math.min(1, 0.45);
@@ -1065,7 +1113,7 @@ function renderHud() {
     <div>MP ${bar(p.mp, p.maxMp, "mp")}</div>
     <div>XP ${bar(p.xp, p.xpNeed, "xp")}</div>
     <div class="attrs">STR ${p.attrs.str} INT ${p.attrs.int} WIS ${p.attrs.wis} DEX ${p.attrs.dex} VIT ${p.attrs.vit} &bull; ATK ${p.atk} DEF ${p.def} &bull; ${p.gold}g</div>
-    <div class="where">${s.map.name}${s.map.tier ? " &mdash; depth " + s.map.tier : ""} (${s.map.layout})</div>
+    <div class="where">${s.map.name}${s.map.tier ? " &mdash; depth " + s.map.tier : ""} (${s.map.layout})${s.map.elementName ? ` <span style="color:${s.map.elementColor}">&middot; ${s.map.elementName} level &mdash; protection advised</span>` : ""}</div>
     <div class="quests">${s.quests.map(q => q.turnedIn ? `<span class="qdone">${q.name}: done</span>` : `${q.name}: ${q.progress}/${q.need}`).join(" &bull; ")}</div>
     <div class="equip">W: ${p.equipment.weapon || "none"} &bull; A: ${p.equipment.armor || "none"} &bull; T: ${p.equipment.trinket || "none"}</div>`;
   el("skills").innerHTML = p.skills.map((sk, i) =>
@@ -1316,6 +1364,29 @@ function afterAction() {
   el("death").style.display = core.dead ? "flex" : "none";
 }
 
+// ---------- bestiary panel ----------
+
+const BESTIARY_EL_COLORS = { fire: "#ff7040", frost: "#8fd0ff", acid: "#90e050", storm: "#ffd860", shadow: "#9a6ad0" };
+
+function renderBestiary() {
+  const b = core.bestiary();
+  const panel = el("bestiary");
+  const fams = {};
+  for (const r of b.rows) (fams[r.family] ||= []).push(r);
+  let html = `<div style="font-weight:bold;color:#ffd76a;margin-bottom:6px">Bestiary &mdash; ${b.seenCount}/${b.total} species seen &middot; ~${b.combos} variants roam themed floors</div>`;
+  for (const fam of Object.keys(fams).sort()) {
+    const rows = fams[fam].slice().sort((a, b) => (b.seen ? 1 : 0) - (a.seen ? 1 : 0));
+    html += `<div style="color:#8ab;margin:8px 0 2px;text-transform:uppercase;font-size:10px;letter-spacing:1px">${fam}</div>`;
+    for (const r of rows) {
+      if (!r.seen) { html += `<div style="color:#556">? &nbsp;?????????? &middot; tier ${r.minTier}+</div>`; continue; }
+      const chips = r.elements.map(e => ` <span style="color:${BESTIARY_EL_COLORS[e] || "#fff"}">${e}</span>`).join("");
+      html += `<div style="color:#cfe">${r.name} &middot; t${r.minTier} &middot; hp ${r.hp} &middot; xp ${r.xp}${chips}${r.unique ? ' <span style="color:#e080ff">unique</span>' : ""}</div>`;
+    }
+  }
+  panel.innerHTML = html;
+  panel.style.display = "block";
+}
+
 window.addEventListener("keydown", e => {
   if (core.screen !== "play") return;
   autoGen++;
@@ -1326,6 +1397,11 @@ window.addEventListener("keydown", e => {
   else if (e.key === ">" || e.key === ">") { core.act({ type: "descend" }); afterAction(); }
   else if (e.key === "<" || e.key === ",") { core.act({ type: "ascend" }); afterAction(); }
   else if (e.key === "i" || e.key === "I") { el("inv").classList.toggle("open"); renderHud(); }
+  else if (e.key === "b" || e.key === "B") {
+    if (el("bestiary").style.display === "block") el("bestiary").style.display = "none";
+    else renderBestiary();
+  }
+  else if (e.key === "Escape") el("bestiary").style.display = "none";
   else if (e.key === "m" || e.key === "M") {
     mapOpen = !mapOpen;
     mmCanvas.style.display = mapOpen ? "block" : "none";
@@ -1430,6 +1506,9 @@ window.game = {
   sellPriceFor: it => sellPrice(it),
   openIdentPicker: mode => openIdentPicker(mode || "free"),
   pickerOpen: () => el("picker").style.display === "block",
+  bestiary: () => core.bestiary(),
+  bestiaryOpen: () => el("bestiary").style.display === "block",
+  resist: element => core.resist(element),
   heroForward: () => {
     const root = playerSprite?.userData.modelRoot;
     if (!root) return null;

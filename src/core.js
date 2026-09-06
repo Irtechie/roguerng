@@ -3,7 +3,7 @@
 
 import {
   RACES, CLASSES, SKILLS, SPELLBOOKS, WEAPONS, ARMORS, TRINKETS,
-  SHOP, VENDORS,
+  SHOP, VENDORS, ELEMENTS, WARD_ITEMS, floorElement, FAMILIES,
   BLESSINGS, CURSES, MONSTERS, BOSSES, MAPS, QUEST_ITEM_NAMES
 } from "./data.js";
 import { generateLayout, generateOutdoor, layoutArchetype, makeRng, hashStr } from "./gen.js";
@@ -143,7 +143,7 @@ export class Core {
     const arch = layoutArchetype(worldKey, tier);
     const { grid, floors } = generateLayout(worldKey, tier, arch);
     const rng = makeRng(hashStr(key + ":" + this.seed));
-    const map = { key, kind: "dungeon", mapId, tier, arch, name: def.name, grid, floors, entities: [], stairs: null, spawn: null, w: grid[0].length, h: grid.length };
+    const map = { key, kind: "dungeon", mapId, tier, arch, element: floorElement(mapId, tier), name: def.name, grid, floors, entities: [], stairs: null, spawn: null, w: grid[0].length, h: grid.length };
 
     map.spawn = floors[Math.floor(rng() * floors.length)];
     let stairs = floors[0], bestD = -1;
@@ -228,11 +228,16 @@ export class Core {
     const m = MONSTERS[monsterId], def = MAPS[mapId];
     const hpMult = (1 + 0.35 * (tier - 1)) * def.difficulty;
     const dmgAdd = Math.floor((tier - 1) * 0.6) + Math.floor((def.difficulty - 1) * 8);
-    const hp = Math.round(m.hp * hpMult);
+    // Themed floors: ~70% of creatures wear the floor's element as a variant.
+    const el = !m.unique ? floorElement(mapId, tier) : "none";
+    const variant = el !== "none" && rng() < 0.7;
+    const E = variant ? ELEMENTS[el] : null;
+    const hp = Math.round(m.hp * hpMult * (E ? E.hp : 1));
     return {
-      uid: nextUid(), type: "monster", monsterId, name: m.name, glyph: m.glyph, color: m.color, icon: m.icon,
-      hp, maxHp: hp, dmg: m.dmg + dmgAdd, def: m.def + Math.floor((tier - 1) / 3),
-      xp: Math.round(m.xp * (1 + 0.3 * (tier - 1)) * def.difficulty), x, y, stun: 0
+      uid: nextUid(), type: "monster", monsterId, element: variant ? el : "none",
+      name: (E ? E.prefix : "") + m.name, glyph: m.glyph, color: E ? E.color : m.color, icon: m.icon,
+      hp, maxHp: hp, dmg: m.dmg + dmgAdd + (E ? E.bonus : 0), def: m.def + Math.floor((tier - 1) / 3),
+      xp: Math.round(m.xp * (1 + 0.3 * (tier - 1)) * def.difficulty * (E ? E.xp : 1)), x, y, stun: 0
     };
   }
 
@@ -249,6 +254,13 @@ export class Core {
 
   buffSum(key) {
     return this.player.buffs.reduce((s, b) => s + (b[key] || 0), 0);
+  }
+
+  // Elemental protection: gear resist affixes + any allRes buff (Ward spell).
+  resist(element) {
+    const E = ELEMENTS[element];
+    if (!E || !E.res) return 0;
+    return this.affixSum(E.res) + this.buffSum("allRes");
   }
 
   attr(k) {
@@ -758,6 +770,11 @@ export class Core {
     } else if (type === "armor") {
       const a = ARMORS.find(x => x.id === id);
       item = { uid: nextUid(), kind: "armor", slot: "armor", id: a.id, name: a.name, def: a.def, tier: a.tier, glyph: "[", color: "#c0a070", icon: a.icon, affixes: [], cursed: false, ident: true };
+    } else if (type === "trinket") {
+      const w = WARD_ITEMS.find(x => x.id === id);
+      if (!w) return false;
+      const label = (ELEMENTS[w.element]?.name || "") + " Resistance";
+      item = { uid: nextUid(), kind: "trinket", slot: "trinket", id: w.id, name: w.name, tier: w.tier, glyph: "'", color: "#e0c060", icon: w.icon, affixes: [{ key: ELEMENTS[w.element].res, name: label, value: w.value }], cursed: false, ident: true };
     } else if (type === "book") {
       const b = SPELLBOOKS[id];
       item = { uid: nextUid(), kind: "book", bookId: id, name: b.name, glyph: b.glyph, color: b.color, icon: b.icon, reqLevel: b.reqLevel, ident: true };
@@ -887,10 +904,16 @@ export class Core {
   monsterAttack(m) {
     const p = this.player, e = this.eff();
     m.facing = { dx: Math.sign(p.x - m.x), dy: Math.sign(p.y - m.y) };
-    const dmg = Math.max(1, rand1to(this.rng, m.dmg) - rand0to(this.rng, Math.max(0, e.def)));
+    let dmg = Math.max(1, rand1to(this.rng, m.dmg) - rand0to(this.rng, Math.max(0, e.def)));
+    const E = m.element && m.element !== "none" ? ELEMENTS[m.element] : null;
+    let burn = 0;
+    if (E) burn = Math.max(0, E.bonus - 2 * this.resist(m.element));
+    dmg += burn;
     p.hp -= dmg;
     p.turnsSinceDamage = 0;
     this.say(`${m.name} hits you for ${dmg}.`, "#ff9090");
+    if (burn > 0) this.say(`The ${E.name.toLowerCase()} sears you for ${burn}!`, E.color);
+    else if (E) this.say(`Your ward smothers the ${E.name.toLowerCase()}.`, "#7be07b");
     if (p.hp <= 0) this.die(m);
   }
 
@@ -923,7 +946,7 @@ export class Core {
       version: Core.SAVE_VERSION, seed: this.seed, kills: this.kills,
       player: this.player,
       maps: [...this.maps.values()].map(m => ({
-        key: m.key, kind: m.kind, mapId: m.mapId, tier: m.tier, arch: m.arch,
+        key: m.key, kind: m.kind, mapId: m.mapId, tier: m.tier, arch: m.arch, element: m.element,
         grid: m.grid, entities: m.entities, stairs: m.stairs, spawn: m.spawn,
         monsterKinds: m.monsterKinds, w: m.w, h: m.h
       }))
@@ -948,6 +971,32 @@ export class Core {
     return true;
   }
 
+  noteSighting(monsterId, element) {
+    const p = this.player;
+    const m = MONSTERS[monsterId];
+    if (!m) return;
+    if (!p.seen) p.seen = {};
+    const s = p.seen[monsterId] || (p.seen[monsterId] = { n: 0, el: {} });
+    const first = s.n === 0;
+    const newEl = element && element !== "none" && !s.el[element];
+    if (first || newEl) s.n++;
+    if (newEl) s.el[element] = 1;
+    else if (element && element !== "none") s.el[element]++;
+    if (first) this.say(`Bestiary: ${m.name} recorded.`, "#7be07b");
+  }
+
+  bestiary() {
+    const seen = this.player?.seen || {};
+    const rows = Object.keys(MONSTERS).map(id => {
+      const m = MONSTERS[id], s = seen[id];
+      return { id, name: m.name, minTier: m.minTier, hp: m.hp, dmg: m.dmg, xp: m.xp, unique: !!m.unique,
+        family: FAMILIES[id] || "monstrosity", seen: !!s, elements: s ? Object.keys(s.el) : [] };
+    });
+    return { rows: rows.sort((a, b) => a.minTier - b.minTier || a.name.localeCompare(b.name)),
+      total: rows.length, seenCount: rows.filter(r => r.seen).length,
+      combos: rows.length * Object.keys(ELEMENTS).length };
+  }
+
   // ---------- read models ----------
 
   status() {
@@ -964,7 +1013,8 @@ export class Core {
         equipment: { weapon: labelOrNull(p.equipment.weapon), armor: labelOrNull(p.equipment.armor), trinket: labelOrNull(p.equipment.trinket) },
         bag: p.bag.map(describeItem)
       },
-      map: { key: map.key, name: map.name, kind: map.kind, tier: map.tier || 0, layout: map.arch !== undefined ? LAYOUT_NAMES_SHORT[map.arch] : "town" },
+      map: { key: map.key, name: map.name, kind: map.kind, tier: map.tier || 0, layout: map.arch !== undefined ? LAYOUT_NAMES_SHORT[map.arch] : "town",
+        element: map.element || "none", elementName: ELEMENTS[map.element]?.name || null, elementColor: ELEMENTS[map.element]?.color || null },
       quests: Object.entries(p.quests).map(([id, q]) => {
         const mapId = Object.keys(MAPS).find(mid => MAPS[mid].quest.id === id);
         return { id, name: MAPS[mapId].quest.itemName, progress: q.progress, need: MAPS[mapId].quest.need, done: q.done, turnedIn: q.turnedIn };
@@ -976,7 +1026,7 @@ export class Core {
   entities() {
     const map = this.getMap(this.player.mapKey);
     const out = map.entities.filter(e => !(e.type === "monster" && e.hp <= 0)).map(e => {
-      if (e.type === "monster") return { kind: "monster", uid: e.uid, monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name, facing: e.facing || null };
+      if (e.type === "monster") return { kind: "monster", uid: e.uid, monsterId: e.monsterId, isBoss: !!e.boss, glyph: e.glyph, color: e.color, icon: e.icon, element: e.element || "none", tint: ELEMENTS[e.element]?.tint ?? null, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, name: e.name, facing: e.facing || null };
       if (e.type === "item") return { kind: "item", glyph: e.item.glyph, color: e.item.color, icon: e.item.icon, x: e.x, y: e.y, name: itemLabel(e.item) };
       if (e.type === "npc") return { kind: "npc", npcId: e.npcId, glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
       if (e.type === "portal") return { kind: "portal", glyph: e.glyph, color: e.color, icon: e.icon, x: e.x, y: e.y, name: e.name };
@@ -1130,7 +1180,13 @@ export function genItem(mapId, tier, rng, forceBlessed = false) {
     const n = forceBlessed ? 2 : Math.floor(rng() * 3);
     for (let i = 0; i < n; i++) {
       const b = BLESSINGS[Math.floor(rng() * BLESSINGS.length)];
-      item.affixes.push({ key: b.key, name: "Blessing of " + b.name, value: 1 + Math.floor(rng() * 3) });
+      const el = Object.values(ELEMENTS).find(E => E.res === b.key);
+      item.affixes.push({ key: b.key, name: el ? `${el.name} Resistance` : "Blessing of " + b.name, value: 1 + Math.floor(rng() * 3) });
+    }
+    // Themed floors favor drops that protect against their own danger.
+    const E = ELEMENTS[floorElement(mapId, tier)];
+    if (E && E.res && !item.affixes.some(a => a.key === E.res) && rng() < 0.45) {
+      item.affixes.push({ key: E.res, name: `${E.name} Resistance`, value: 1 + Math.floor(rng() * 2) });
     }
   }
   return item;

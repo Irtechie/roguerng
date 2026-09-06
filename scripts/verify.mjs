@@ -807,6 +807,7 @@ async function walkTo(page, tx, ty, limit = 300) {
       else if (e.key === "key") it = { kind: "key" };
       else if (type === "weapon") { const w = d.WEAPONS.find(x => x.id === id); it = { kind: "weapon", dmg: w.dmg, tier: w.tier, affixes: [], ident: true }; }
       else if (type === "armor") { const a = d.ARMORS.find(x => x.id === id); it = { kind: "armor", def: a.def, tier: a.tier, affixes: [], ident: true }; }
+      else if (type === "trinket") { const w = d.WARD_ITEMS.find(x => x.id === id); it = { kind: "trinket", tier: w.tier, affixes: [{ value: w.value }], ident: true }; }
       else { const b = d.SPELLBOOKS[id]; it = { kind: "book", reqLevel: b.reqLevel }; }
       worst = Math.min(worst, e.price - g.sellPriceFor(it));
     }
@@ -815,6 +816,43 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("sell prices scale with quality; unidentified ~2/5 of identified; no buy/sell arbitrage",
     pricing.w2 > pricing.w1 * 4 && Math.abs(pricing.unkRatio - 0.4) < 0.03 && pricing.worst >= 1,
     JSON.stringify(pricing));
+
+  const beast = await page.evaluate(() => {
+    const g = window.game, c = window.game.core;
+    const b = g.bestiary();
+    const families = new Set(b.rows.map(r => r.family));
+    c.player.level = 14;
+    c.player.unlockedTiers = { ashfall: 8, darkfang: 8, greenhills: 8 };
+    g.travel("ashfall", 6);
+    const mons = c.getMap().entities.filter(e => e.type === "monster" && e.hp > 0);
+    const prefixed = mons.filter(m => /^(Fire|Storm|Frost|Acid|Shadow) /.test(m.name)).length;
+    // stand next to a live monster so the next render frame records a sighting
+    const target = mons[0];
+    if (target) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (c.getMap().grid[target.y + dy][target.x + dx] === ".") { c.player.x = target.x + dx; c.player.y = target.y + dy; break; }
+    }
+    c.player.equipment.trinket = { uid: 1, kind: "trinket", slot: "trinket", affixes: [{ key: "fireRes", name: "Fire Resistance", value: 3 }], ident: true };
+    return { total: b.total, combos: b.combos, families: families.size,
+      monCount: mons.length, prefixed, res: g.resist("fire") };
+  });
+  await page.keyboard.press(".");
+  await page.waitForTimeout(200);
+  const seenN = await page.evaluate(() => window.game.bestiary().seenCount);
+  check("bestiary spans 60+ species, element families, hundreds of variants",
+    beast.total >= 60 && beast.combos >= 300 && beast.families >= 6 && seenN > 0,
+    JSON.stringify({ ...beast, seenN }));
+  check("themed floors spawn elemental variants you must protect against",
+    beast.monCount >= 4 && beast.prefixed >= 2 && beast.res === 3,
+    JSON.stringify(beast));
+
+  await page.keyboard.press("b");
+  const beastPanel = await page.evaluate(() => ({
+    open: window.game.bestiaryOpen(),
+    text: document.getElementById("bestiary").innerText.slice(0, 120)
+  }));
+  await page.keyboard.press("Escape");
+  check("B opens the bestiary compendium with seen species tallies",
+    beastPanel.open && /Bestiary/.test(beastPanel.text), beastPanel.text.replace(/\s+/g, " ").slice(0, 90));
 
   check("no page errors during full loop", errors.length === 0, errors.join(" | ").slice(0, 300));
 
