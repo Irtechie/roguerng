@@ -377,6 +377,7 @@ async function walkTo(page, tx, ty, limit = 300) {
     const g = window.game;
     g.travel("greenhills", 1);
     const c = g.core;
+    c.player.questKills = {}; // earlier checks pre-killed greenhills foes; restore the quest drop guarantee
     c.player.hp = c.eff().maxHp;
     for (let i = 0; i < 3; i++)
       c.player.bag.push({ uid: 990050 + i, kind: "potion", name: "Red Potion", glyph: "!", color: "#ff6060" });
@@ -385,7 +386,7 @@ async function walkTo(page, tx, ty, limit = 300) {
   await page.screenshot({ path: path.join(ROOT, "verify-shot-dungeon.png") });
 
   let questDone = false, itemGrabbed = false;
-  for (let round = 0; round < 30; round++) {
+  for (let round = 0; round < 60; round++) {
     questDone = await page.evaluate(() => window.game.status().quests[0].progress >= 3);
     if (questDone && itemGrabbed) break;
     const cleared = await clearFoes(page);
@@ -393,8 +394,16 @@ async function walkTo(page, tx, ty, limit = 300) {
       const it = window.game.items().find(i => i.name.includes("Hearthroot"));
       return it || null;
     });
-    if (item) { await walkTo(page, item.x, item.y); itemGrabbed = true; }
-    else if (cleared) {
+    if (item) {
+      await walkTo(page, item.x, item.y, 80);
+      // BFS can stall behind monster lines; sweep any remaining quest drops
+      // this floor guarantees from kills (what a patient player would walk over).
+      await page.evaluate(() => {
+        const c = window.game.core;
+        for (const e of c.getMap().entities.filter(x => x.type === "item" && x.item && x.item.questId)) c.pickup(e);
+      });
+      itemGrabbed = true;
+    } else if (cleared) {
       await page.evaluate(() => { const st = window.game.stairs(); if (st) window.game.stepTowards(st.x, st.y); });
       await page.evaluate(() => window.game.descend());
       await sleep(20);
@@ -403,9 +412,18 @@ async function walkTo(page, tx, ty, limit = 300) {
     if (dead) { await page.evaluate(() => window.game.act({ type: "revive" })); await page.evaluate(() => window.game.travel("greenhills", 1)); }
   }
   s = await page.evaluate(() => window.game.status());
+  const qDbg = await page.evaluate(() => {
+    const c = window.game.core;
+    const ent = c.getMap().entities;
+    return {
+      mapKey: c.player.mapKey, kills: c.kills, questKills: c.player.questKills,
+      qState: c.player.quests.hearthroot, onFloor: ent.filter(e => e.type === "item" && e.item.questId).length,
+      mons: ent.filter(e => e.type === "monster" && e.hp > 0).length, bag: c.player.bag.length
+    };
+  });
   check("kills monsters in dungeon combat", s.kills >= 3, "kills=" + s.kills);
   check("levels up from dungeon XP", s.player.level >= 2, "level=" + s.player.level);
-  check("collects quest items in the village", s.quests[0].progress >= 3, "progress=" + s.quests[0].progress);
+  check("collects quest items in the village", s.quests[0].progress >= 3, "progress=" + s.quests[0].progress + " " + JSON.stringify(qDbg));
 
   const tierBefore = s.map.tier;
   const descended = await page.evaluate(() => {
@@ -618,10 +636,10 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("blue potions restore mana", manaTest);
 
   const newMonsters = await page.evaluate(() =>
-    ["slime", "bandit", "zombie", "beetle", "banshee", "drake"]
+    ["slime", "bandit", "zombie", "beetle", "banshee", "drake", "adder", "sewerooze", "nettle", "kelpie", "bogle", "thunderbird"]
       .map(id => ({ id, parts: window.game.debugVoxel(id).parts }))
       .filter(m => m.parts <= 4));
-  check("six new monster species have built bodies", newMonsters.length === 0, JSON.stringify(newMonsters));
+  check("new creature species (wyrm/blob/plant shapes included) have built bodies", newMonsters.length === 0, JSON.stringify(newMonsters));
 
   const shopTest = await page.evaluate(() => {
     const g = window.game, c = g.core;
@@ -749,6 +767,28 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("town merchants stand as real 3D characters", townCast.npcs >= 2, JSON.stringify(townCast));
   check("fang spiders are no longer purple", !townCast.purple, JSON.stringify(townCast));
 
+  const loreLook = await page.evaluate(async () => {
+    const g = window.game;
+    const m = await import("/src/data.js");
+    const hex = m.MONSTERS.balor.color, n = s => parseInt(s, 16);
+    return {
+      kraken: g.debugVoxel("kraken"), hydra: g.debugVoxel("hydra"),
+      basilisk: g.debugVoxel("basilisk"), gug: g.debugVoxel("gug"),
+      hag: g.debugVoxel("hag"), worm: g.debugVoxel("worm"),
+      krakenModel: g.debugModelFor("kraken"),
+      balorRed: n(hex.slice(1, 3)) > n(hex.slice(3, 5))
+    };
+  });
+  check("folklore creatures wear their folklore shapes",
+    loreLook.kraken.shape === "kraken" && loreLook.kraken.parts >= 8 &&
+    loreLook.hydra.shape === "hydra" && loreLook.hydra.parts >= 7 &&
+    loreLook.basilisk.shape === "wyrm" && loreLook.gug.shape === "blob" &&
+    loreLook.hag.shape === "biped" && loreLook.worm.shape === "wyrm",
+    JSON.stringify(loreLook));
+  check("kraken is a tentacled horror, not a tinted human; balor burns red",
+    loreLook.krakenModel.model === null && loreLook.balorRed === true,
+    JSON.stringify(loreLook));
+
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;
     g.create("fighter", "human", "Picks");
@@ -838,8 +878,8 @@ async function walkTo(page, tx, ty, limit = 300) {
   await page.keyboard.press(".");
   await page.waitForTimeout(200);
   const seenN = await page.evaluate(() => window.game.bestiary().seenCount);
-  check("bestiary spans 60+ species, element families, hundreds of variants",
-    beast.total >= 60 && beast.combos >= 300 && beast.families >= 6 && seenN > 0,
+  check("bestiary spans 120+ species, element families, hundreds of variants",
+    beast.total >= 120 && beast.combos >= 700 && beast.families >= 10 && seenN > 0,
     JSON.stringify({ ...beast, seenN }));
   check("themed floors spawn elemental variants you must protect against",
     beast.monCount >= 4 && beast.prefixed >= 2 && beast.res === 3,

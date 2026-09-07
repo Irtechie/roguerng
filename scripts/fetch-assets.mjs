@@ -32,7 +32,18 @@ export const ICONS = [
   "delapouite/3d-stairs", "delapouite/fencer", "delapouite/prayer-beads",
   "delapouite/character", "delapouite/elf-ear", "delapouite/dungeon-gate",
   "lorc/campfire", "delapouite/torch", "delapouite/door",
-  "delapouite/magic-potion", "lorc/fairy-wand"
+  "delapouite/magic-potion", "lorc/fairy-wand",
+  // bestiary expansion candidates; unknown slugs are skipped, not fatal
+  "delapouite/boar-head", "lorc/snake", "delapouite/snake", "lorc/owl", "delapouite/owl",
+  "lorc/fairy", "delapouite/fairy", "lorc/mushroom", "delapouite/mushroom",
+  "delapouite/sparkles", "lorc/gear", "delapouite/gear", "delapouite/crab",
+  "delapouite/kraken", "lorc/tentacle", "delapouite/tentacle", "skoll/dead-head",
+  "delapouite/helmet", "lorc/wings", "delapouite/wings", "skoll/lightning-bolt",
+  "lorc/lightning-bolt", "delapouite/lightning-bolt", "lorc/evil-eye", "delapouite/eye",
+  "lorc/fish", "delapouite/leaf", "lorc/leaf", "delapouite/beetle-shell",
+  "delapouite/horse-head", "skoll/horse-head", "skoll/cat-head", "delapouite/cat-head",
+  "lorc/beetle", "delapouite/bat-wing", "lorc/bat-wing", "delapouite/acorn",
+  "lorc/frog", "delapouite/frog", "delapouite/fangs", "lorc/feather"
 ];
 
 function get(url, redirects = 3) {
@@ -51,15 +62,21 @@ function get(url, redirects = 3) {
 }
 
 const downloaded = [];
+const missing = [];
 for (const icon of ICONS) {
   const svgPath = path.join(SVG_DIR, icon.replace("/", "__") + ".svg");
   if (!fs.existsSync(svgPath)) {
     const url = "https://raw.githubusercontent.com/game-icons/icons/master/" + icon + ".svg";
-    fs.writeFileSync(svgPath, await get(url));
-    downloaded.push(icon);
+    try {
+      fs.writeFileSync(svgPath, await get(url));
+      downloaded.push(icon);
+    } catch {
+      fs.rmSync(svgPath, { force: true });
+      missing.push(icon);
+    }
   }
 }
-console.log("svg files:", ICONS.length, "(newly downloaded", downloaded.length + ")");
+console.log("svg files:", ICONS.length - missing.length, "(newly downloaded", downloaded.length + ", skipped", missing.length + ")", missing.join(" ") || "");
 
 // Rasterize all SVGs to white 128px PNGs in one browser pass.
 const browser = await chromium.launch({ args: ["--allow-file-access-from-files"] });
@@ -68,7 +85,7 @@ let made = 0;
 for (const icon of ICONS) {
   const svgPath = path.join(SVG_DIR, icon.replace("/", "__") + ".svg");
   const pngPath = path.join(IMG_DIR, icon.replace("/", "__") + ".png");
-  if (fs.existsSync(pngPath)) continue;
+  if (fs.existsSync(pngPath) || !fs.existsSync(svgPath)) continue;
   let svg = fs.readFileSync(svgPath, "utf8");
   svg = svg.replace(/currentColor/g, "#ffffff").replace(/#000000/gi, "#ffffff");
   await page.setContent(`<body style="margin:0"><img id="i" src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}"></body>`);

@@ -546,7 +546,11 @@ const EYE_POS = {
   float: [0.13, 1.32, 0.1, 0.055, 0xff4060], slab: [0.3, 0.6, 0.08, 0.055, 0xffa030],
   harpy: [0.14, 1.02, 0.08, 0.05], imp: [0.1, 0.64, 0.06, 0.045, 0xff5050],
   tall: [0.14, 1.3, 0.1, 0.055, 0x9fdcff], brute: [0.18, 1.02, 0.11, 0.06],
-  biped: [0.15, 0.94, 0.09, 0.05, 0xffee99]
+  biped: [0.15, 0.94, 0.09, 0.05, 0xffee99],
+  kraken: [0.48, 0.72, 0.17, 0.09, 0xffd050],
+  hydra: [0.12, 1.14, 0.08, 0.045, 0xff5040],
+  wyrm: [0.58, 0.44, 0.1, 0.045, 0xff5050], blob: [0.12, 0.46, 0.12, 0.05, 0x302828],
+  plant: [0.14, 1.02, 0.11, 0.05, 0x20140a]
 };
 
 // ---------- real GLB models (KayKit packs, CC0 — assets/models/LICENSE-KayKit.txt) ----------
@@ -666,7 +670,28 @@ const MONSTER_MODELS = {
   firegiant: { model: "Barbarian", tint: 0xd06030, scale: 1.9 },
   frostgiant: { model: "Barbarian", tint: 0xa8c8e8, scale: 1.9 },
   cloudgiant: { model: "Barbarian", tint: 0xd8e0e8, scale: 2.0 },
-  archfiend: { model: "Barbarian", tint: 0xc03030, scale: 1.5 }
+  archfiend: { model: "Barbarian", tint: 0xc03030, scale: 1.5 },
+  brownie: { model: "Rogue", tint: 0x8a5a30, scale: 0.6 },
+  redcap: { model: "Rogue", tint: 0xa03030, scale: 0.72 },
+  wererat: { model: "Rogue", tint: 0x9a7a5a, scale: 0.82 },
+  percht: { model: "Rogue", tint: 0xb8c8e8, scale: 0.85 },
+  hag: { model: "Rogue", tint: 0x6a8a5a },
+  strigoi: { model: "Rogue", tint: 0xb8a8a0 },
+  drowned: { model: "Skeleton_Warrior", tint: 0x5a7a6a },
+  dullahan: { model: "Knight", tint: 0x3a3e4c, scale: 1.25 },
+  livingarmor: { model: "Knight", tint: 0x8a90a0 },
+  clockwork: { model: "Knight", tint: 0xb8893a, scale: 0.85 },
+  scarecrow: { model: "Rogue", tint: 0xb0903a },
+  sandman: { model: "Mage", tint: 0x7868c8, scale: 0.9 },
+  pixie: { model: "Mage", tint: 0xc878e8, scale: 0.5 },
+  wisp: { model: "Mage", tint: 0xffd878, scale: 0.5 },
+  bogle: { model: "Skeleton_Mage", tint: 0x8898a8 },
+  merrow: { model: "Skeleton_Mage", tint: 0x4a8a9a },
+  nightgaunt: { model: "Skeleton_Mage", tint: 0x383850, scale: 1.2 },
+  claygolem: { model: "Barbarian", tint: 0x9a7a5a, scale: 1.3 },
+  // gug and kraken render as procedural flesh/tentacle shapes, not humanoid rigs
+  balor: { model: "Barbarian", tint: 0x8a2418, scale: 2.0 },
+  deepone: { model: "Rogue", tint: 0x5a8a6a, scale: 0.95 }
 };
 // Townsfolk as real characters instead of floating icons, each tinted to tell
 // them apart. The floating icon stays as a nameplate so you know who's who.
@@ -698,19 +723,47 @@ const SPECIES = {
   greenpaw: { shape: "brute", scale: 1.7 }, hagraven: { shape: "harpy", scale: 1.5 },
   cinder: { shape: "slab", scale: 1.8 }, hero: { shape: "biped", scale: 1 },
   ant: { shape: "quadruped", scale: 0.35 }, bloodbat: { shape: "bat", scale: 0.55 },
-  direrat: { shape: "quadruped", scale: 0.7 }, snake: { shape: "spider", scale: 0.5 },
+  direrat: { shape: "quadruped", scale: 0.7 }, snake: { shape: "wyrm", scale: 0.5 },
   boar: { shape: "quadruped", scale: 1.0 }, bear: { shape: "quadruped", scale: 1.35 },
-  worm: { shape: "spider", scale: 0.65 }, frostworm: { shape: "spider", scale: 0.8 },
+  worm: { shape: "wyrm", scale: 0.65 }, frostworm: { shape: "wyrm", scale: 0.8 },
   centipede: { shape: "spider", scale: 0.6 }, scorpion: { shape: "spider", scale: 0.8 },
   stalker: { shape: "spider", scale: 0.95 }, gianttoad: { shape: "quadruped", scale: 0.8 },
   shadow: { shape: "float", scale: 0.9 }, specter: { shape: "float", scale: 1.0 },
   wight: { shape: "biped", scale: 0.95 }, ghoul: { shape: "biped", scale: 0.9 },
   ogrmage: { shape: "biped", scale: 1.1 }, direwolf: { shape: "quadruped", scale: 1.25 },
   hellhound: { shape: "quadruped", scale: 1.1 }, cockatrice: { shape: "quadruped", scale: 0.8 },
-  basilisk: { shape: "quadruped", scale: 1.1 }, chimera: { shape: "quadruped", scale: 1.25 },
-  manticore: { shape: "quadruped", scale: 1.2 }, hydra: { shape: "quadruped", scale: 1.35 },
-  wyrm: { shape: "quadruped", scale: 1.7 }, elemental: { shape: "float", scale: 1.1 },
-  fireelem: { shape: "float", scale: 1.05 }
+  basilisk: { shape: "wyrm", scale: 1.0 }, chimera: { shape: "quadruped", scale: 1.25 },
+  manticore: { shape: "quadruped", scale: 1.2 }, hydra: { shape: "hydra", scale: 1.4 },
+  wyrm: { shape: "wyrm", scale: 1.7 }, elemental: { shape: "float", scale: 1.1 },
+  jackal: { shape: "quadruped", scale: 0.75 },
+  dingo: { shape: "quadruped", scale: 0.7 }, adder: { shape: "wyrm", scale: 0.5 },
+  vinesnake: { shape: "wyrm", scale: 0.45 }, gianttick: { shape: "spider", scale: 0.3 },
+  newt: { shape: "quadruped", scale: 0.55 }, vampirebat: { shape: "bat", scale: 0.55 },
+  sewerooze: { shape: "blob", scale: 0.9 }, tarblob: { shape: "blob", scale: 1.0 },
+  amberooze: { shape: "blob", scale: 1.25 }, gazeblob: { shape: "blob", scale: 1.6 },
+  wisp: { shape: "float", scale: 0.5 }, pixie: { shape: "float", scale: 0.5 },
+  bogle: { shape: "float", scale: 0.9 }, nightgaunt: { shape: "float", scale: 1.2 },
+  sandman: { shape: "float", scale: 0.95 }, byakhee: { shape: "bat", scale: 1.1 },
+  nettle: { shape: "plant", scale: 0.8 }, sporeling: { shape: "plant", scale: 0.8 },
+  bramblemound: { shape: "plant", scale: 1.5 }, ashvine: { shape: "plant", scale: 1.15 },
+  strangle: { shape: "plant", scale: 1.2 }, sentineloak: { shape: "plant", scale: 2.4 },
+  kelpie: { shape: "quadruped", scale: 1.2 }, eachuisge: { shape: "quadruped", scale: 1.5 },
+  cupside: { shape: "quadruped", scale: 1.45 }, werboar: { shape: "quadruped", scale: 1.1 },
+  catsith: { shape: "quadruped", scale: 0.8 }, pooka: { shape: "quadruped", scale: 1.0 },
+  selkie: { shape: "quadruped", scale: 0.9 }, longworm: { shape: "wyrm", scale: 1.5 },
+  lindworm: { shape: "wyrm", scale: 1.7 }, seaserpent: { shape: "wyrm", scale: 1.9 },
+  amphisbaena: { shape: "wyrm", scale: 1.35 }, adze: { shape: "wyrm", scale: 0.95 },
+  thunderbird: { shape: "harpy", scale: 1.6 }, roc: { shape: "harpy", scale: 1.8 },
+  strix: { shape: "harpy", scale: 0.9 }, andrealphus: { shape: "harpy", scale: 1.35 },
+  deepone: { shape: "biped", scale: 0.95 }, brownie: { shape: "biped", scale: 0.6 },
+  redcap: { shape: "biped", scale: 0.7 }, percht: { shape: "biped", scale: 0.85 },
+  scarecrow: { shape: "biped", scale: 1.05 }, clockwork: { shape: "biped", scale: 0.85 },
+  wererat: { shape: "biped", scale: 0.8 }, hag: { shape: "biped", scale: 0.95 },
+  drowned: { shape: "skeleton", scale: 0.95 }, merrow: { shape: "float", scale: 1.05 },
+  bifrons: { shape: "slab", scale: 1.0 }, marchosias: { shape: "quadruped", scale: 1.25 },
+  gug: { shape: "blob", scale: 1.7 }, claygolem: { shape: "brute", scale: 1.2 },
+  kraken: { shape: "kraken", scale: 2.1 }, balor: { shape: "brute", scale: 2.0 },
+  dullahan: { shape: "tall", scale: 1.25 }, livingarmor: { shape: "biped", scale: 1.05 }
 };
 
 function mergeTint(a, b) {
@@ -834,6 +887,81 @@ function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly, elemTint) {
       partC(g, dark, 0.1, 0.2, -0.13, 0, 0.18, "z");
       partC(g, dark, 0.1, 0.2, 0.13, 0, 0.18, "z");
       break;
+    case "wyrm":
+      // segmented serpent: no legs, shrinking body rings, raised hooded head
+      head(partS(g, mat, 0.3, 0, 0.42, 0.4));
+      part(g, dark, 0.14, 0.16, 0.12, 0, 0.24, 0.32);
+      {
+        let r = 0.26, y = 0;
+        for (let seg = 0; seg < 5; seg++) {
+          y -= 0.3;
+          r *= 0.82;
+          const ring = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 7), seg % 2 ? dark : mat);
+          ring.position.set(0, y, r * 0.95);
+          g.add(ring);
+        }
+        const tail = new THREE.Mesh(new THREE.ConeGeometry(r, 0.5, 6), dark);
+        tail.rotation.x = -Math.PI / 2;
+        tail.position.set(0, y - 0.32, r);
+        g.add(tail);
+      }
+      break;
+    case "kraken": {
+      // bulbous mantle with huge eyes above a writhing ring of tentacles
+      head(partS(g, mat, 0.52, 0, 0.05, 0.66, 0.78));
+      partS(g, light, 0.3, 0, 0.22, 0.95, 0.5);
+      for (let t = 0; t < 8; t++) {
+        const a = (t / 8) * Math.PI * 2 + 0.4;
+        const len = 0.8 + (t % 3) * 0.25, rr = 0.085 - (t % 2) * 0.02;
+        const dir = new THREE.Vector3(Math.cos(a) * 0.85, Math.sin(a) * 0.85, 0.55 + (t % 2) * 0.25).normalize();
+        const cap = new THREE.Mesh(CAP, t % 2 ? dark : mat);
+        cap.scale.set(rr / 0.5, (len + 2 * rr) / 2, rr / 0.5);
+        cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        cap.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, 0.16).addScaledVector(dir, len / 2);
+        g.add(cap);
+      }
+      break;
+    }
+    case "hydra": {
+      // coiled body with three upright serpent necks, each with its own head
+      partS(g, mat, 0.45, 0, 0, 0.2, 0.45);
+      partS(g, dark, 0.32, 0, 0, 0.45, 0.35);
+      const base = new THREE.Vector3(0, 0, 0.42);
+      for (const [t, b] of [[0.5, -0.6], [0, -0.85], [-0.5, -0.6]]) {
+        const dir = new THREE.Vector3(-Math.sin(t) * Math.cos(b), -Math.sin(t) * Math.sin(b), Math.cos(t));
+        const nk = partC(g, mat, 0.06, 0.62, 0, 0, 0);
+        nk.rotation.set(Math.PI / 2, b, t);
+        nk.position.copy(base).addScaledVector(dir, 0.31);
+        const hp = partS(g, mat, 0.17, 0, 0, 0, 0.9);
+        hp.position.copy(base).addScaledVector(dir, 0.72);
+        if (t === 0) head(hp);
+      }
+      break;
+    }
+    case "blob":
+      // low translucent dome with drips and a bright nucleus
+      {
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), mat);
+        dome.scale.set(1, 1, 0.62);
+        dome.position.set(0, 0, 0.26);
+        g.add(dome);
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 7), light);
+        core.position.set(0, 0.05, 0.3);
+        g.add(core);
+        for (const [dx, dy] of [[0.3, 0.12], [-0.26, -0.14], [0.1, -0.3]])
+          partS(g, dark, 0.12, dx, dy, 0.1);
+        head(dome);
+      }
+      break;
+    case "plant":
+      // rooted stalk with a heavy cap and two side fronds
+      partC(g, dark, 0.07, 0.5, 0, 0, 0.5, "z");
+      head(partS(g, mat, 0.32, 0, 0, 1.05, 0.7));
+      part(g, light, 0.34, 0.06, 0.14, -0.22, 0, 0.72, 0.6);
+      part(g, light, 0.34, 0.06, 0.14, 0.22, 0, 0.72, -0.6);
+      for (const [lx, ly] of [[-0.16, 0.1], [0.16, -0.06], [-0.06, -0.18]])
+        part(g, dark, 0.2, 0.05, 0.05, lx, ly, 0.06, 1.2);
+      break;
     default:
       partC(g, mat, 0.16, 0.24, 0, 0, 0.46, "z");
       head(partS(g, mat, 0.36, 0, 0, 0.92));
@@ -847,6 +975,7 @@ function makeVoxel(speciesId, glyph, color, isBoss, proceduralOnly, elemTint) {
   g.scale.setScalar(sp.scale);
   g.userData.voxel = true;
   g.userData.species = speciesId || sp.shape;
+  g.userData.shape = sp.shape;
   g.userData.floats = sp.shape === "float";
   return g;
 }
@@ -1500,7 +1629,7 @@ window.game = {
   saveGame, tryContinue,
   debugVoxel: id => {
     const g = makeVoxel(id, "", "#ffffff", false, true);
-    return { species: g.userData.species, parts: g.children.length, scale: g.scale.x };
+    return { species: g.userData.species, shape: g.userData.shape, parts: g.children.length, scale: g.scale.x };
   },
   debugModels: () => ({ ...modelStatus }),
   sellPriceFor: it => sellPrice(it),
