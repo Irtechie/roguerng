@@ -192,7 +192,7 @@ export class Core {
     }
     for (let i = 0; i < 3 + Math.floor(tier / 3); i++) {
       const cell = freeCell();
-      if (cell) map.entities.push({ uid: nextUid(), type: "item", item: genItem(mapId, tier, rng), x: cell.x, y: cell.y });
+      if (cell) map.entities.push({ uid: nextUid(), type: "item", item: genItem(mapId, tier, rng, false, this.player && this.player.classId), x: cell.x, y: cell.y });
     }
     // Chests hold gold and gear; locked ones bite unless you carry an iron key.
     const chestCount = 1 + (rng() < 0.55 ? 1 : 0);
@@ -201,7 +201,7 @@ export class Core {
       if (!cell) continue;
       const loot = [];
       const lootCount = 1 + (rng() < 0.4 ? 1 : 0);
-      for (let j = 0; j < lootCount; j++) loot.push(genItem(mapId, tier, rng));
+      for (let j = 0; j < lootCount; j++) loot.push(genItem(mapId, tier, rng, false, this.player && this.player.classId));
       const locked = rng() < 0.35;
       map.entities.push({
         uid: nextUid(), type: "chest", x: cell.x, y: cell.y,
@@ -218,7 +218,7 @@ export class Core {
       glyph: "‡", color: "#b06030",
       stash: {
         gold: 20 + tier * 18 + Math.floor(rng() * 20),
-        items: [genItem(mapId, Math.min(12, tier + 2), rng), genItem(mapId, Math.min(12, tier + 2), rng)]
+        items: [genItem(mapId, Math.min(12, tier + 2), rng, false, this.player && this.player.classId), genItem(mapId, Math.min(12, tier + 2), rng, false, this.player && this.player.classId)]
       }
     });
     return map;
@@ -247,7 +247,7 @@ export class Core {
     let s = 0;
     for (const slot of ["weapon", "armor", "trinket"]) {
       const it = this.player.equipment[slot];
-      if (it) for (const a of it.affixes) if (a.key === key) s += a.value;
+      if (it) for (const a of (it.affixes || [])) if (a.key === key) s += a.value;
     }
     return s;
   }
@@ -455,7 +455,7 @@ export class Core {
       }
     }
     if (this.rng() < 0.3) {
-      const it = genItem(p.mapKey === TOWN_KEY ? "greenhills" : mapDef.mapId, p.mapKey === TOWN_KEY ? 1 : this.getMap().tier, this.rng);
+      const it = genItem(p.mapKey === TOWN_KEY ? "greenhills" : mapDef.mapId, p.mapKey === TOWN_KEY ? 1 : this.getMap().tier, this.rng, false, p.classId);
       map.entities.push({ uid: nextUid(), type: "item", x: m.x, y: m.y, item: it });
     }
     while (p.xp >= this.xpNeed()) this.levelUp();
@@ -589,7 +589,7 @@ export class Core {
       return true;
     }
     if (npc.npcId === "sage") {
-      this.say("Sage Ianna: 'Every spell I sell was written by a wiser head than yours. Any class with the patience to read may learn from a book.'", "#c0a0ff");
+      this.say("Sage Ianna: 'Every spell I sell was written by a wiser head than yours. Wards and Names are common arts, open to any reader; the rest only answer to the tradition that wrote them. Bring the book of your own kind.'", "#c0a0ff");
       return true;
     }
     const mapId = Object.keys(MAPS).find(mid => MAPS[mid].quest.npc === npc.npcId);
@@ -601,7 +601,7 @@ export class Core {
     if (q.done && q.progress >= quest.need) {
       q.turnedIn = true;
       p.xp += quest.rewardXp;
-      const reward = genItem(mapId, Math.max(2, def.tiers / 2), this.rng, true);
+      const reward = genItem(mapId, Math.max(2, def.tiers / 2), this.rng, true, p.classId);
       p.bag.push(reward);
       this.say(quest.complete, "#ffd700");
       this.say(`Reward: +${quest.rewardXp} XP and ${itemLabel(reward)}!`, "#ffd700");
@@ -854,6 +854,10 @@ export class Core {
     } else if (it.kind === "book") {
       const sb = SPELLBOOKS[it.bookId];
       if (p.skills.includes(sb.teaches)) { this.say("You already know that spell."); return; }
+      if (sb.classes && !sb.classes.includes(p.classId)) {
+        this.say(`The ${sb.name} is written in a tongue your training cannot trace.`, "#c0a0a0");
+        return;
+      }
       if (p.level < sb.reqLevel) { this.say(`You need level ${sb.reqLevel} to comprehend it.`); return; }
       p.skills.push(sb.teaches);
       p.bag.splice(idx, 1);
@@ -1149,14 +1153,16 @@ function makeKey() {
   return { uid: nextUid(), kind: "key", name: "Iron Key", glyph: "k", color: "#c0c0d0", icon: null, ident: true };
 }
 
-export function genItem(mapId, tier, rng, forceBlessed = false) {
+export function genItem(mapId, tier, rng, forceBlessed = false, classId = null) {
   const def = MAPS[mapId];
   const lootTier = Math.max(1, tier + (def ? def.lootShift : 0) + (rng() < 0.3 ? 1 : 0));
   const roll = rng();
     if (roll < 0.15 && !forceBlessed) {
     const books = Object.entries(SPELLBOOKS).filter(([, b]) => b.reqLevel <= Math.max(2, tier * 2));
     if (books.length) {
-      const [bookId, b] = books[Math.floor(rng() * books.length)];
+      const learnable = classId ? books.filter(([, b]) => !b.classes || b.classes.includes(classId)) : books;
+      const pool = learnable.length && rng() < 0.8 ? learnable : books;
+      const [bookId, b] = pool[Math.floor(rng() * pool.length)];
       return { uid: nextUid(), kind: "book", bookId, name: b.name, glyph: b.glyph, color: b.color, icon: b.icon, reqLevel: b.reqLevel };
     }
   }

@@ -847,6 +847,43 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("Entangle binds foes: multi-bolt now stuns and scales with WIS",
     entangleTest.skip || entangleTest.ok, JSON.stringify(entangleTest));
 
+  const gear = await page.evaluate(async () => {
+    const g = window.game, c = g.core;
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    const out = {};
+    // most spells are tradition-locked; only general ones cross-learn
+    c.player.level = 9;
+    c.player.skills = c.player.skills.filter(s => s !== "frost-shock" && s !== "identify");
+    c.player.bag.push({ uid: "bf", kind: "book", bookId: "book-frost", name: "Book of Frost Shock", glyph: "=", color: "#fff", reqLevel: 2, ident: true });
+    g.useItem("bf");
+    out.frostBlocked = !c.player.skills.includes("frost-shock");
+    c.player.bag.push({ uid: "bi", kind: "book", bookId: "book-identify", name: "Book of Identify", glyph: "=", color: "#fff", reqLevel: 2, ident: true });
+    g.useItem("bi");
+    out.identLearned = c.player.skills.includes("identify");
+    // worn armor changes the silhouette, not the class
+    c.player.equipment.armor = { uid: "ar", kind: "armor", slot: "armor", id: "robes", name: "Test Robes", def: 1, ident: true };
+    await raf(); await raf();
+    out.robesHero = g.debugSceneModels().hero;
+    c.player.equipment.armor = { uid: "ap", kind: "armor", slot: "armor", id: "plate", name: "Test Plate", def: 5, ident: true };
+    await raf(); await raf();
+    out.plateHero = g.debugSceneModels().hero;
+    // wielded weapon rides the hand
+    c.player.equipment.weapon = { uid: "wp", kind: "weapon", slot: "weapon", id: "longsword", name: "Test Sword", dmg: 6, ident: true };
+    await raf(); await raf();
+    out.heroWeapon = g.heroGear().weapon;
+    // opening the pack reveals the equipment doll
+    document.getElementById("inv").classList.remove("open");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
+    await raf(); await raf();
+    out.dollOpen = g.dollOpen();
+    out.dollSlots = (document.getElementById("dollSlots").textContent || "").trim();
+    return out;
+  });
+  check("gear look: spells are tradition-locked (Identify general), armor swaps rig, weapon rides hand, pack shows doll",
+    gear.frostBlocked && gear.identLearned && gear.robesHero === "Mage" && gear.plateHero === "Knight" &&
+    gear.heroWeapon === "longsword" && gear.dollOpen && /Test Plate|longsword|Sword/i.test(gear.dollSlots),
+    JSON.stringify(gear));
+
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;
     g.create("fighter", "human", "Picks");

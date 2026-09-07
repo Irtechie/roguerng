@@ -168,19 +168,21 @@ export const SKILLS = {
   "dragon-breath": { name: "Dragon's Breath", level: 7, cost: 12, cd: 6,  kind: "multi-bolt", power: 7, range: 4, count: 3, desc: "A cone of fire: 7 + INT damage to up to 3 foes." }
 };
 
-// Spellbooks teach their skill to any class at the required level.
+// Spellbooks teach their skill at the required level. `classes` restricts the
+// study to those traditions; a book with no `classes` is general and anyone can study.
 export const SPELLBOOKS = {
-  "book-frost":  { name: "Book of Frost Shock",   teaches: "frost-shock",    reqLevel: 2, glyph: "=", color: "#9fd8ff", icon: "delapouite__spell-book" },
-  "book-lightning": { name: "Book of Chain Lightning", teaches: "chain-lightning", reqLevel: 6, glyph: "=", color: "#c8b4ff", icon: "delapouite__spell-book" },
-  "book-smite":  { name: "Book of Divine Smite",  teaches: "smite",          reqLevel: 4, glyph: "=", color: "#fff0a0", icon: "delapouite__spell-book" },
-  "book-barrier":{ name: "Book of Arcane Barrier",teaches: "arcane-barrier", reqLevel: 4, glyph: "=", color: "#a0ffd8", icon: "delapouite__spell-book" },
-  "book-heal":   { name: "Book of Healing",     teaches: "heal",   reqLevel: 2, glyph: "=", color: "#c8ffc8", icon: "delapouite__spell-book" },
-  "book-volley": { name: "Book of Volley",      teaches: "volley", reqLevel: 5, glyph: "=", color: "#ffd8a0", icon: "delapouite__spell-book" },
+  "book-frost":  { name: "Book of Frost Shock",   teaches: "frost-shock",    reqLevel: 2, classes: ["mage", "sorcerer"], glyph: "=", color: "#9fd8ff", icon: "delapouite__spell-book" },
+  "book-lightning": { name: "Book of Chain Lightning", teaches: "chain-lightning", reqLevel: 6, classes: ["mage", "sorcerer"], glyph: "=", color: "#c8b4ff", icon: "delapouite__spell-book" },
+  "book-smite":  { name: "Book of Divine Smite",  teaches: "smite",          reqLevel: 4, classes: ["cleric", "paladin"], glyph: "=", color: "#fff0a0", icon: "delapouite__spell-book" },
+  "book-barrier":{ name: "Book of Arcane Barrier",teaches: "arcane-barrier", reqLevel: 4, classes: ["mage", "sorcerer"], glyph: "=", color: "#a0ffd8", icon: "delapouite__spell-book" },
+  "book-heal":   { name: "Book of Healing",     teaches: "heal",   reqLevel: 2, classes: ["cleric", "paladin", "druid"], glyph: "=", color: "#c8ffc8", icon: "delapouite__spell-book" },
+  "book-volley": { name: "Book of Volley",      teaches: "volley", reqLevel: 5, classes: ["ranger", "bard"], glyph: "=", color: "#ffd8a0", icon: "delapouite__spell-book" },
   "book-ward":   { name: "Book of Warding",     teaches: "elemental-ward", reqLevel: 6, glyph: "=", color: "#b0ffd8", icon: "delapouite__spell-book" },
-  "book-entangle":{ name: "Book of Entangling", teaches: "entangle",     reqLevel: 4, glyph: "=", color: "#a0d8a0", icon: "delapouite__spell-book" },
-  "book-lullaby": { name: "Book of Lullabies",  teaches: "lullaby",      reqLevel: 2, glyph: "=", color: "#d8b0e8", icon: "delapouite__spell-book" },
-  "book-warcry":  { name: "Book of War Cry",    teaches: "warcry",       reqLevel: 1, glyph: "=", color: "#e0a080", icon: "delapouite__spell-book" },
-  "book-dragon":  { name: "Book of Dragon Fire",teaches: "dragon-breath",reqLevel: 7, glyph: "=", color: "#ff9060", icon: "delapouite__spell-book" }
+  "book-identify":{ name: "Book of Identify",    teaches: "identify",       reqLevel: 2, glyph: "=", color: "#bfe0ff", icon: "delapouite__spell-book" },
+  "book-entangle":{ name: "Book of Entangling", teaches: "entangle",     reqLevel: 4, classes: ["druid", "ranger"], glyph: "=", color: "#a0d8a0", icon: "delapouite__spell-book" },
+  "book-lullaby": { name: "Book of Lullabies",  teaches: "lullaby",      reqLevel: 2, classes: ["bard", "monk"], glyph: "=", color: "#d8b0e8", icon: "delapouite__spell-book" },
+  "book-warcry":  { name: "Book of War Cry",    teaches: "warcry",       reqLevel: 1, classes: ["barbarian", "fighter"], glyph: "=", color: "#e0a080", icon: "delapouite__spell-book" },
+  "book-dragon":  { name: "Book of Dragon Fire",teaches: "dragon-breath",reqLevel: 7, classes: ["sorcerer", "mage"], glyph: "=", color: "#ff9060", icon: "delapouite__spell-book" }
 };
 
 export const WEAPONS = [
@@ -520,6 +522,7 @@ export const SHOP = [
   { key: "trinket:storm-totem", name: "Storm Totem (storm resist)", price: 150, vendor: "sage" },
   { key: "trinket:veil-eclipse", name: "Veil of Eclipse (shadow resist)", price: 150, vendor: "sage" },
   { key: "book:book-ward", name: "Book of Warding", price: 190, vendor: "sage" },
+  { key: "book:book-identify", name: "Book of Identify", price: 120, vendor: "sage" },
   { key: "book:book-frost", name: "Book of Frost Shock", price: 180, vendor: "sage" },
   { key: "book:book-heal", name: "Book of Healing", price: 160, vendor: "sage" },
   { key: "book:book-smite", name: "Book of Divine Smite", price: 220, vendor: "sage" },

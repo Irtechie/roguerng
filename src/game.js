@@ -1044,12 +1044,83 @@ function makeProp(e, dims) {
   return g;
 }
 
-function makePlayerVoxel(classId, color, raceId) {
-  const def = CLASS_MODELS[classId];
+// Worn armor shifts the silhouette only at the extremes: heavy plate/chain read
+// as a knight, rags/robes as a robe adept. Light leathers keep the class rig so
+// class identity survives; the wielded weapon prop is the day-to-day tell.
+const AVATAR_BY_ARMOR = { rags: "Mage", robes: "Mage", chain: "Knight", plate: "Knight" };
+
+const gearSig = p => [p.classId, p.raceId, p.equipment.weapon?.id || "-", p.equipment.armor?.id || "-", p.equipment.trinket?.id || "-"].join("|");
+
+function heroWeaponProp(weapon, accent) {
+  if (!weapon) return null;
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc8ccd8, metalness: 0.7, roughness: 0.35 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.9 });
+  const glow = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 1.8 });
+  const id = weapon.id;
+  if (["dagger", "sickle", "scimitar"].includes(id)) {
+    part(g, wood, 0.045, 0.045, 0.14, 0, 0, 0.07);
+    part(g, steel, 0.15, 0.03, 0.03, 0, 0, 0.16);
+    part(g, steel, 0.05, 0.05, id === "dagger" ? 0.35 : 0.5, 0, 0, 0.42);
+  } else if (["shortsword", "longsword", "runesblade"].includes(id)) {
+    part(g, wood, 0.05, 0.05, 0.16, 0, 0, 0.08);
+    part(g, steel, 0.19, 0.03, 0.03, 0, 0, 0.18);
+    part(g, id === "runesblade" ? glow : steel, 0.055, 0.055, id === "longsword" ? 0.9 : 0.62, 0, 0, 0.55);
+  } else if (id === "spear") {
+    partC(g, wood, 0.03, 1.2, 0, 0, 0.62, "z");
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), steel);
+    tip.rotation.x = Math.PI / 2;
+    tip.position.set(0, 0, 1.32);
+    g.add(tip);
+  } else if (id === "staff" || id === "wand") {
+    const r = id === "wand" ? 0.025 : 0.035, len = id === "wand" ? 0.5 : 1.25;
+    partC(g, wood, r, len, 0, 0, len / 2 + 0.05, "z");
+    partS(g, glow, id === "wand" ? 0.05 : 0.08, 0, 0, len + 0.14);
+  } else if (id === "greataxe" || id === "warhammer" || id === "mace") {
+    partC(g, wood, 0.035, 0.95, 0, 0, 0.52, "z");
+    if (id === "greataxe") part(g, steel, 0.3, 0.06, 0.22, 0.14, 0, 0.92);
+    else partS(g, steel, id === "warhammer" ? 0.1 : 0.085, 0, 0, 0.98);
+  } else if (id === "shortbow" || id === "longbow") {
+    const r = id === "longbow" ? 0.34 : 0.26;
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(r, 0.025, 6, 16, Math.PI), wood);
+    arc.position.set(0, 0, 0.5);
+    g.add(arc);
+    part(g, steel, 0.015, r * 2, 0.015, 0, 0, 0.5);
+  } else {
+    part(g, wood, 0.045, 0.045, 0.14, 0, 0, 0.07);
+    part(g, steel, 0.05, 0.05, 0.4, 0, 0, 0.34);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+function attachToHand(root, prop) {
+  if (!prop) return false;
+  const norm = s => (s || "").replace(/[._]/g, "").toLowerCase();
+  let hand = null;
+  root.traverse(o => { if (!hand && norm(o.name) === "handslotr") hand = o; });
+  if (!hand) return false;
+  prop.scale.setScalar(0.45);
+  prop.rotation.x = Math.PI / 2;
+  hand.add(prop);
+  return true;
+}
+
+function makePlayerVoxel(classId, color, raceId, equipment) {
+  const def = CLASS_MODELS[classId] || {};
   const raceScale = (raceId && RACES[raceId] && RACES[raceId].scale) || 1;
-  if (def && def.model && GLB[def.model]) {
-    const m = modelInstance(def.model, 1.4 * raceScale, true, def.tint);
-    if (m) { addBlobShadow(m, 0.36); applyShadows(m); return m; }
+  const armorId = equipment && equipment.armor ? equipment.armor.id : null;
+  const rigName = (armorId && AVATAR_BY_ARMOR[armorId]) || def.model || null;
+  if (rigName && GLB[rigName]) {
+    const m = modelInstance(rigName, 1.4 * raceScale, true, def.tint);
+    if (m) {
+      attachToHand(m, heroWeaponProp(equipment && equipment.weapon, color));
+      m.userData.gearSig = equipment ? gearSig({ classId, raceId, equipment }) : null;
+      m.userData.weaponProp = equipment && equipment.weapon ? equipment.weapon.id : null;
+      addBlobShadow(m, 0.36);
+      applyShadows(m);
+      return m;
+    }
   }
   const g = makeVoxel("hero", "@", color);
   const mat = new THREE.MeshStandardMaterial({ color: 0xd8d8e8, roughness: 0.4, metalness: 0.5 });
@@ -1079,6 +1150,7 @@ function makePlayerVoxel(classId, color, raceId) {
     partS(g, mat, 0.16, -0.32, 0, 0.92);
   }
   g.scale.setScalar(raceScale);
+  g.userData.gearSig = equipment ? gearSig({ classId, raceId, equipment }) : null;
   addBlobShadow(g, 0.36);
   applyShadows(g);
   return g;
@@ -1217,8 +1289,12 @@ function rebuildEntities() {
   for (const [key, obj] of pool) {
     if (!seen.has(key)) { entityGroup.remove(obj); pool.delete(key); }
   }
+  if (playerSprite && playerSprite.userData.gearSig && gearSig(core.player) !== playerSprite.userData.gearSig) {
+    scene.remove(playerSprite);
+    playerSprite = null;
+  }
   if (!playerSprite) {
-    playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color, core.player.raceId);
+    playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color, core.player.raceId, core.player.equipment);
     playerSprite.userData.voxel = true;
     const pf0 = core.player.facing || { dx: 1, dy: 0 };
     playerSprite.rotation.z = facingYaw(pf0.dx, pf0.dy);
@@ -1264,11 +1340,47 @@ function renderLog() {
   el("log").innerHTML = core.log.slice(-8).map(l => `<div style="color:${l.color}">${l.text}</div>`).join("");
   el("log").scrollTop = el("log").scrollHeight;
 }
+// ---------- equipment doll ----------
+
+let dollRenderer = null, dollScene = null, dollCam = null, dollGroup = null, dollSig = null;
+
+function ensureDoll() {
+  const p = core.player;
+  if (!p) return;
+  const sig = gearSig(p);
+  if (!dollRenderer) {
+    dollRenderer = new THREE.WebGLRenderer({ canvas: el("dollCanvas"), alpha: true, antialias: true });
+    dollRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    dollRenderer.setSize(150, 210, false);
+    dollScene = new THREE.Scene();
+    dollCam = new THREE.PerspectiveCamera(34, 150 / 210, 0.1, 20);
+    dollCam.position.set(0.5, -3.1, 1.2);
+    dollCam.lookAt(0, 0, 0.85);
+    dollScene.add(new THREE.HemisphereLight(0x8899cc, 0x10131c, 1.2));
+    const key = new THREE.DirectionalLight(0xfff0d8, 2.6);
+    key.position.set(2.5, -3.5, 4);
+    dollScene.add(key);
+  }
+  if (dollSig !== sig) {
+    if (dollGroup) dollScene.remove(dollGroup);
+    dollGroup = makePlayerVoxel(p.classId, CLASSES[p.classId].color, p.raceId, p.equipment);
+    dollScene.add(dollGroup);
+    dollSig = sig;
+  }
+  const eq = p.equipment;
+  const line = (label, it) => `<div class="sl">${label}: ` + (it
+    ? `<img src="assets/img/${it.icon || "delapouite__glowing-artifact"}.png" class="ic"> <b>${it.name}</b>` +
+      (it.affixes && it.affixes.length ? ` <span style="color:#7ddfff">(${it.affixes.map(a => a.name).join(", ")})</span>` : "")
+    : "none") + "</div>";
+  el("dollSlots").innerHTML = line("Wield", eq.weapon) + line("Wear", eq.armor) + line("Ward", eq.trinket);
+}
+
 function renderInventory(s) {
   const inv = el("inv");
   if (!inv.classList.contains("open")) return;
+  ensureDoll();
   const shopOpen = el("shop").style.display === "block";
-  inv.innerHTML = "<h3>Pack</h3>" + s.player.bag.map(it => {
+  el("invList").innerHTML = "<h3>Pack</h3>" + s.player.bag.map(it => {
     let btn = "";
     if (["weapon", "armor", "trinket"].includes(it.kind)) btn = `<button data-act="equip" data-uid="${it.uid}">Equip</button>`;
     if (it.kind === "potion" || it.kind === "book" || it.kind === "scroll-identify")
@@ -1569,6 +1681,11 @@ function loop() {
   loop.lastSec = sec;
   for (const g of pool.values()) if (g.userData.mixer) g.userData.mixer.update(mdt);
   if (playerSprite?.userData.mixer) playerSprite.userData.mixer.update(mdt);
+  if (dollGroup && el("inv").classList.contains("open") && core.screen === "play") {
+    if (dollGroup.userData.mixer) dollGroup.userData.mixer.update(mdt);
+    dollGroup.rotation.z += mdt * 0.8;
+    dollRenderer.render(dollScene, dollCam);
+  }
   const px = wx(core.player.x, mapDims.w), py = wy(core.player.y, mapDims.h);
   const camTarget = new THREE.Vector3(px, py + 1.5, 0);
   const camPos = new THREE.Vector3(px, py - 8.5, 7.5);
@@ -1621,6 +1738,8 @@ window.game = {
   ascend: () => { core.act({ type: "ascend" }); afterAction(); },
   heroAngle: () => playerSprite ? playerSprite.rotation.z : null,
   heroScale: () => playerSprite ? +playerSprite.scale.x.toFixed(2) : null,
+  dollOpen: () => el("inv").classList.contains("open") && !!dollGroup,
+  heroGear: () => playerSprite ? { sig: playerSprite.userData.gearSig || null, weapon: playerSprite.userData.weaponProp || null } : null,
   setBloom: s => { bloomPass.strength = s; return bloomPass.strength; },
   debugPost: () => ({
     rtType: composer.renderTarget1.texture.type,
