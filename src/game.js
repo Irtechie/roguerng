@@ -705,8 +705,17 @@ const NPC_MODELS = {
   sage: { model: "Mage", tint: 0xb48fd8 }
 };
 const CLASS_MODELS = {
-  fighter: "Knight", paladin: "Knight", mage: "Mage", cleric: "Mage",
-  thief: "Rogue", ranger: "Barbarian"
+  fighter: { model: "Knight" },
+  paladin: { model: "Knight", tint: 0xd8c8a8 },
+  barbarian: { model: "Barbarian" },
+  ranger: { model: "Barbarian", tint: 0xa8c08a },
+  mage: { model: "Mage", tint: 0xc8d4ff },
+  cleric: { model: "Mage", tint: 0xf0e8c8 },
+  druid: { model: "Mage", tint: 0xa8d09a },
+  sorcerer: { model: "Mage", tint: 0xd4b0f0 },
+  thief: { model: "Rogue", tint: 0x9aa0b8 },
+  bard: { model: "Rogue", tint: 0xf0b8d0 },
+  monk: { model: "Rogue", tint: 0xe0c0a0 }
 };
 
 const SPECIES = {
@@ -1035,10 +1044,11 @@ function makeProp(e, dims) {
   return g;
 }
 
-function makePlayerVoxel(classId, color) {
-  const modelName = CLASS_MODELS[classId];
-  if (modelName && GLB[modelName]) {
-    const m = modelInstance(modelName, 1.4, true);
+function makePlayerVoxel(classId, color, raceId) {
+  const def = CLASS_MODELS[classId];
+  const raceScale = (raceId && RACES[raceId] && RACES[raceId].scale) || 1;
+  if (def && def.model && GLB[def.model]) {
+    const m = modelInstance(def.model, 1.4 * raceScale, true, def.tint);
     if (m) { addBlobShadow(m, 0.36); applyShadows(m); return m; }
   }
   const g = makeVoxel("hero", "@", color);
@@ -1068,6 +1078,7 @@ function makePlayerVoxel(classId, color) {
     part(g, mat, 0.07, 0.07, 0.55, -0.32, 0, 0.58);
     partS(g, mat, 0.16, -0.32, 0, 0.92);
   }
+  g.scale.setScalar(raceScale);
   addBlobShadow(g, 0.36);
   applyShadows(g);
   return g;
@@ -1207,7 +1218,7 @@ function rebuildEntities() {
     if (!seen.has(key)) { entityGroup.remove(obj); pool.delete(key); }
   }
   if (!playerSprite) {
-    playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color);
+    playerSprite = makePlayerVoxel(core.player.classId, CLASSES[core.player.classId].color, core.player.raceId);
     playerSprite.userData.voxel = true;
     const pf0 = core.player.facing || { dx: 1, dy: 0 };
     playerSprite.rotation.z = facingYaw(pf0.dx, pf0.dy);
@@ -1609,6 +1620,7 @@ window.game = {
   descend: () => { core.act({ type: "descend" }); afterAction(); },
   ascend: () => { core.act({ type: "ascend" }); afterAction(); },
   heroAngle: () => playerSprite ? playerSprite.rotation.z : null,
+  heroScale: () => playerSprite ? +playerSprite.scale.x.toFixed(2) : null,
   setBloom: s => { bloomPass.strength = s; return bloomPass.strength; },
   debugPost: () => ({
     rtType: composer.renderTarget1.texture.type,

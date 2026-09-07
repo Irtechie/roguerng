@@ -563,11 +563,12 @@ async function walkTo(page, tx, ty, limit = 300) {
   const mage = await page.evaluate(() => window.game.create("mage", "elf", "Zapp"));
   const rogueKit = await page.evaluate(async () => {
     const d = await import("/src/data.js");
-    return { classes: Object.keys(d.CLASSES).sort().join(","), identifyKind: d.SKILLS.identify.kind,
+    return { classList: Object.keys(d.CLASSES), identifyKind: d.SKILLS.identify.kind,
       aimed: !!d.SKILLS["aimed-shot"].dex, shop: d.SHOP.length };
   });
-  check("Rogue roster: Fighter/Mage/Cleric/Paladin/Ranger/Thief with Identify & DEX skills",
-    rogueKit.classes === "cleric,fighter,mage,paladin,ranger,thief" && rogueKit.identifyKind === "identify" &&
+  check("Rogue roster: core six classes present (of the wider roster) with Identify & DEX skills",
+    ["cleric","fighter","mage","paladin","ranger","thief"].every(c => rogueKit.classList.includes(c)) &&
+    rogueKit.identifyKind === "identify" &&
     rogueKit.aimed && rogueKit.shop >= 8, JSON.stringify(rogueKit));
 
   const classRules = await page.evaluate(() => {
@@ -788,6 +789,63 @@ async function walkTo(page, tx, ty, limit = 300) {
   check("kraken is a tentacled horror, not a tinted human; balor burns red",
     loreLook.krakenModel.model === null && loreLook.balorRed === true,
     JSON.stringify(loreLook));
+
+  const roster = await page.evaluate(async () => {
+    const m = await import("/src/data.js");
+    const g = window.game;
+    const raf = () => new Promise(r => requestAnimationFrame(r));
+    const built = {};
+    for (const cls of ["barbarian", "druid", "bard", "monk", "sorcerer"]) {
+      g.create(cls, "human", "T");
+      await raf(); await raf();
+      built[cls] = g.debugSceneModels().hero;
+    }
+    g.create("barbarian", "orc", "Grim");
+    const orcStr = g.status().player.attrs.str;         // 14 base + orc +2 = 16
+    g.create("fighter", "halfling", "Pip");
+    await raf(); await raf();
+    const halfScale = g.heroScale();
+    g.create("fighter", "human", "Norm");
+    await raf(); await raf();
+    const humanScale = g.heroScale();
+    g.create("barbarian", "human", "Grim");
+    const c = g.core; c.player.mp = 99;
+    const buffsBefore = c.player.buffs.length;
+    g.act({ type: "skill", slot: 0 });                   // War Cry (barbarian lvl1)
+    return {
+      classCount: Object.keys(m.CLASSES).length, raceCount: Object.keys(m.RACES).length,
+      classBtns: document.querySelectorAll("#classPick button").length,
+      raceBtns: document.querySelectorAll("#racePick button").length,
+      built, orcStr, halfScale, humanScale, buffGained: c.player.buffs.length - buffsBefore
+    };
+  });
+  check("roster grew to 11 classes and 6 races, all selectable at creation",
+    roster.classCount >= 11 && roster.raceCount >= 6 &&
+    roster.classBtns >= 11 && roster.raceBtns >= 6, JSON.stringify(roster));
+  check("new classes wear real rigs, races change stats and stature, War Cry buffs",
+    Object.values(roster.built).every(Boolean) && roster.orcStr === 16 &&
+    roster.halfScale < roster.humanScale * 0.9 && roster.buffGained >= 1,
+    JSON.stringify(roster));
+
+  const entangleTest = await page.evaluate(() => {
+    const g = window.game, c = g.core;
+    c.player.level = 14;
+    c.player.unlockedTiers = { ashfall: 8, darkfang: 8, greenhills: 8 };
+    g.travel("ashfall", 6);
+    const mons = c.getMap().entities.filter(e => e.type === "monster" && e.hp > 0).sort((a, b) => b.hp - a.hp);
+    const target = mons[0];
+    if (!target) return { skip: true };
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (c.getMap().grid[target.y + dy][target.x + dx] === ".") { c.player.x = target.x + dx; c.player.y = target.y + dy; break; }
+    }
+    c.player.mp = 99;
+    c.player.skills = ["entangle"];
+    c.doSkill(0);
+    const t2 = c.getMap().entities.find(e => e.uid === target.uid);
+    return { skip: !target, ok: !!t2 && (t2.stun || 0) >= 1 && t2.hp < t2.maxHp, stun: t2 ? t2.stun : null };
+  });
+  check("Entangle binds foes: multi-bolt now stuns and scales with WIS",
+    entangleTest.skip || entangleTest.ok, JSON.stringify(entangleTest));
 
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;

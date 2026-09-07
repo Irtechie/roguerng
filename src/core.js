@@ -540,9 +540,10 @@ export class Core {
         const targets = near.slice(0, s.count);
         if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No targets in range.", "#ff9090"); return false; }
         for (const t of targets) {
-          const dmg = s.power + (s.dex ? e.dex : e.int) + this.rng() * 3 | 0;
+          const dmg = s.power + (s.dex ? e.dex : s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
           t.hp -= dmg;
           this.say(`${s.name} arcs through ${t.name} for ${dmg}!`, s.dex ? "#a0e0a0" : "#c0a0ff");
+          if (s.stun && t.hp > 0) t.stun = s.stun;
           if (t.hp <= 0) this.killMonster(t);
         }
         break;
@@ -1110,16 +1111,30 @@ export class Core {
 // ---------- item generation ----------
 
 function starterWeapon(classId) {
-  const base = classId === "mage" ? { id: "staff", name: "Apprentice Staff", dmg: 3, icon: "delapouite__wizard-face" } :
-    classId === "cleric" ? { id: "sickle", name: "Ceremonial Sickle", dmg: 4, icon: "delapouite__cleaver" } :
-      { id: "shortsword", name: "Worn Shortsword", dmg: 5, icon: "delapouite__ancient-sword" };
+  const byClass = {
+    mage: { id: "staff", name: "Apprentice Staff", dmg: 3, icon: "delapouite__wizard-face" },
+    cleric: { id: "sickle", name: "Ceremonial Sickle", dmg: 4, icon: "delapouite__cleaver" },
+    barbarian: { id: "greataxe", name: "Heirloom Greataxe", dmg: 8, icon: "lorc__battle-axe" },
+    druid: { id: "sickle", name: "Harvesting Sickle", dmg: 4, icon: "delapouite__cleaver" },
+    bard: { id: "dagger", name: "Concert Razor", dmg: 3, icon: "delapouite__butterfly-knife" },
+    monk: { id: "staff", name: "Training Quarterstaff", dmg: 3, icon: "delapouite__yin-yang" },
+    sorcerer: { id: "dagger", name: "Blooded Knife", dmg: 3, icon: "delapouite__sparkles" }
+  };
+  const base = byClass[classId] || { id: "shortsword", name: "Worn Shortsword", dmg: 5, icon: "delapouite__ancient-sword" };
   return { uid: nextUid(), kind: "weapon", slot: "weapon", glyph: "/", color: "#d0d0e0", affixes: [], cursed: false, ...base };
 }
 function starterArmor(classId) {
-  const base = classId === "mage" ? { id: "robes", name: "Sage Robes", def: 1, icon: "lorc__robe" } :
-    classId === "cleric" ? { id: "leather", name: "Pilgrim Leathers", def: 2, icon: "delapouite__leather-armor" } :
-      { id: "leather", name: "Battered Leathers", def: 2, icon: "delapouite__leather-armor" };
-  return { uid: nextUid(), kind: "armor", slot: "armor", glyph: "[", color: "#c0a070", affixes: [], cursed: false, ...base };
+  const byClass = {
+    mage: { id: "robes", name: "Sage Robes", def: 1, icon: "lorc__robe" },
+    cleric: { id: "leather", name: "Pilgrim Leathers", def: 2, icon: "delapouite__leather-armor" },
+    barbarian: { id: "leather", name: "Wolfspelt Cloak", def: 2, icon: "delapouite__fur-shirt" },
+    druid: { id: "leather", name: "Barkhide Vest", def: 2, icon: "delapouite__leather-armor" },
+    bard: { id: "leather", name: "Traveling Silks", def: 2, icon: "delapouite__leather-armor" },
+    monk: { id: "rags", name: "Wrapping Bandages", def: 1, icon: "delapouite__herbs-bundle" },
+    sorcerer: { id: "robes", name: "Embroidered Silks", def: 1, icon: "lorc__robe" }
+  };
+  const base = { id: "leather", name: "Battered Leathers", def: 2, icon: "delapouite__leather-armor" };
+  return { uid: nextUid(), kind: "armor", slot: "armor", glyph: "[", color: "#c0a070", affixes: [], cursed: false, ...(byClass[classId] || base) };
 }
 function makePotion() {
   return { uid: nextUid(), kind: "potion", name: "Red Potion", glyph: "!", color: "#ff6060", icon: "delapouite__health-potion", ident: true };

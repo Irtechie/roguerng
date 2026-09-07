@@ -43,7 +43,12 @@ export const ICONS = [
   "lorc/fish", "delapouite/leaf", "lorc/leaf", "delapouite/beetle-shell",
   "delapouite/horse-head", "skoll/horse-head", "skoll/cat-head", "delapouite/cat-head",
   "lorc/beetle", "delapouite/bat-wing", "lorc/bat-wing", "delapouite/acorn",
-  "lorc/frog", "delapouite/frog", "delapouite/fangs", "lorc/feather"
+  "lorc/frog", "delapouite/frog", "delapouite/fangs", "lorc/feather",
+  "lorc/open-hand", "delapouite/open-hand", "lorc/hood", "delapouite/hood",
+  "skoll/orc", "delapouite/orc", "lorc/orc", "lorc/gnome", "delapouite/gnome",
+  "lorc/hobbit", "delapouite/hobbit", "delapouite/halfling", "lorc/halfling",
+  "delapouite/yin-yang", "lorc/yin-yang", "delapouite/open-fist", "lorc/fist",
+  "delapouite/glasses", "lorc/glasses", "lorc/wand", "delapouite/wand"
 ];
 
 function get(url, redirects = 3) {

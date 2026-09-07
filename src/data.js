@@ -3,7 +3,10 @@
 export const RACES = {
   human: { name: "Human", icon: "delapouite__character", enchant: { str: 1, int: 1, wis: 1, dex: 1, vit: 1 }, blurb: "Well-rounded (+1 all)." },
   elf:   { name: "Elf",   icon: "delapouite__elf-ear", enchant: { int: 2, dex: 1, vit: -1 }, blurb: "Clever and nimble, but frail (INT +2, DEX +1, VIT -1)." },
-  dwarf: { name: "Dwarf", icon: "delapouite__dwarf-face", enchant: { vit: 2, str: 1, dex: -1 }, blurb: "Stout and strong, but clumsy (VIT +2, STR +1, DEX -1)." }
+  dwarf: { name: "Dwarf", icon: "delapouite__dwarf-face", enchant: { vit: 2, str: 1, dex: -1 }, blurb: "Stout and strong, but clumsy (VIT +2, STR +1, DEX -1)." },
+  orc:     { name: "Orc",      icon: "skoll__troll",   enchant: { str: 2, vit: 1, int: -2 }, scale: 1.08, blurb: "Born of the hill tribes: crushing strength, thick blood, little patience for books (STR +2, VIT +1, INT -2)." },
+  gnome:   { name: "Gnome",    icon: "delapouite__glowing-artifact", enchant: { int: 2, wis: 1, str: -2 }, scale: 0.82, blurb: "Small hands, huge minds: tinkers and hedge-wizards (INT +2, WIS +1, STR -2)." },
+  halfling:{ name: "Halfling", icon: "lorc__hood",     enchant: { dex: 2, vit: 1, str: -2 }, scale: 0.75, blurb: "Quiet feet, quick fingers: hard to hit and harder to catch (DEX +2, VIT +1, STR -2)." }
 };
 
 export const CLASSES = {
@@ -61,6 +64,52 @@ export const CLASSES = {
     weapons: ["dagger", "sickle", "shortsword", "spear", "longsword", "shortbow", "longbow"],
     armors: ["rags", "leather", "studded"],
     blurb: "Deadly at range with a DEX-aimed shot. Bows and blades, leather only."
+  },
+  barbarian: {
+    name: "Barbarian", glyph: "@", color: "#c05a30", icon: "lorc__battle-axe",
+    base: { str: 14, int: 5, wis: 8, dex: 10, vit: 12 },
+    growth: { str: 1, vit: 1, other: 0.5 },
+    hpPer: 7, mpPer: 1, hpBase: 12,
+    skills: ["warcry", "berserk", "seismic-slam", "cleave"],
+    weapons: ["sickle", "spear", "scimitar", "longsword", "greataxe", "warhammer", "runesblade"],
+    armors: ["rags", "leather", "studded", "chain"],
+    blurb: "Hills-born fury: deepest HP in the realm, no armor past chain, and swings that shake the floor."
+  },
+  druid: {
+    name: "Druid", glyph: "@", color: "#6aa84f", icon: "delapouite__herbs-bundle",
+    base: { str: 9, int: 10, wis: 14, dex: 9, vit: 9 },
+    growth: { wis: 1, int: 1, other: 0.5 },
+    hpPer: 3, mpPer: 5, hpBase: 2,
+    skills: ["barkskin", "summon-thorns", "verdant-mend", "entangle", "storm-call"],
+    weapons: ["sickle", "spear", "shortbow", "staff"], armors: ["rags", "robes", "leather", "studded"],
+    blurb: "Wildwise: thorn-curses, creeping vines, and storms called down by WIS. No metal armor."
+  },
+  bard: {
+    name: "Bard", glyph: "@", color: "#e07ab0", icon: "delapouite__beer-horn",
+    base: { str: 8, int: 12, wis: 9, dex: 13, vit: 9 },
+    growth: { dex: 1, int: 1, other: 0.5 },
+    hpPer: 4, mpPer: 4, hpBase: 2,
+    skills: ["inspire", "lullaby", "discord", "martial-cadence", "crescendo"],
+    weapons: ["dagger", "sickle", "shortsword", "scimitar", "shortbow"], armors: ["rags", "robes", "leather", "studded"],
+    blurb: "Songs that steady allies and lullabies that drop foes cold. A blade arm and a spell tongue."
+  },
+  monk: {
+    name: "Monk", glyph: "@", color: "#d8a05a", icon: "delapouite__yin-yang",
+    base: { str: 10, int: 9, wis: 12, dex: 14, vit: 10 },
+    growth: { dex: 1, wis: 1, other: 0.5 },
+    hpPer: 5, mpPer: 3, hpBase: 3,
+    skills: ["flurry", "ki-mend", "stun-palm", "evasion", "whirlwind"],
+    weapons: ["staff", "spear", "dagger"], armors: ["rags", "robes", "leather"],
+    blurb: "Iron body, quick hands: flurry strikes, ki mending, and a palm that stops hearts."
+  },
+  sorcerer: {
+    name: "Sorcerer", glyph: "@", color: "#b06ae0", icon: "delapouite__sparkles",
+    base: { str: 7, int: 15, wis: 9, dex: 10, vit: 9 },
+    growth: { int: 1, vit: 1, other: 0.5 },
+    hpPer: 2, mpPer: 6, hpBase: 0,
+    skills: ["scorcher", "spell-ward", "wild-surge", "elemental-ward", "dragon-breath"],
+    weapons: ["dagger", "staff", "wand"], armors: ["rags", "robes"],
+    blurb: "Magic in the blood: free fire from level one and a wild surge that hits like a falling tower."
   }
 };
 
@@ -90,7 +139,33 @@ export const SKILLS = {
   "natures-whisper":{ name: "Nature's Whisper", level: 3, cost: 5, cd: 4, kind: "self-heal", power: 0.2, wis: true, desc: "Heal 20% max HP + WIS." },
   "hunters-mark":  { name: "Hunter's Mark", level: 4, cost: 4,  cd: 6,  kind: "buff", buff: { atk: 3, turns: 5 }, desc: "Mark your prey: ATK +3 for 5 turns." },
   "volley":        { name: "Volley",        level: 5, cost: 8,  cd: 5,  kind: "multi-bolt", power: 7, range: 6, count: 2, dex: true, desc: "7 + DEX damage to up to 2 foes." },
-  "elemental-ward":{ name: "Elemental Ward", level: 6, cost: 7, cd: 9,  kind: "buff", buff: { allRes: 2, turns: 14 }, desc: "All elemental resistance +2 for 14 turns." }
+  "elemental-ward":{ name: "Elemental Ward", level: 6, cost: 7, cd: 9,  kind: "buff", buff: { allRes: 2, turns: 14 }, desc: "All elemental resistance +2 for 14 turns." },
+  // --- barbarian ---
+  "warcry":        { name: "War Cry",         level: 1, cost: 4,  cd: 7,  kind: "buff", buff: { atk: 3, turns: 4 }, desc: "Rallying roar: ATK +3 for 4 turns." },
+  "seismic-slam":  { name: "Seismic Slam",    level: 5, cost: 9,  cd: 6,  kind: "melee-all", power: 1.6, desc: "The floor answers: 1.6x weapon damage to ALL adjacent foes." },
+  // --- druid ---
+  "barkskin":      { name: "Barkskin",        level: 1, cost: 5,  cd: 8,  kind: "buff", buff: { def: 4, turns: 6 }, desc: "Hide like oak: DEF +4 for 6 turns." },
+  "summon-thorns": { name: "Summon Thorns",   level: 2, cost: 5,  cd: 3,  kind: "bolt", power: 5, range: 4, stun: 1, wis: true, desc: "Brambles bite: 5 + WIS damage, stuns 1 turn." },
+  "verdant-mend":  { name: "Verdant Mend",    level: 3, cost: 5,  cd: 4,  kind: "self-heal", power: 0.2, wis: true, desc: "Moss and sap knit wounds: 20% max HP + WIS." },
+  "entangle":      { name: "Entangle",        level: 4, cost: 7,  cd: 5,  kind: "multi-bolt", power: 5, range: 5, count: 2, stun: 1, wis: true, desc: "Vines seize up to 2 foes: 5 + WIS damage, stun 1 turn." },
+  "storm-call":    { name: "Storm Call",      level: 6, cost: 12, cd: 6,  kind: "multi-bolt", power: 7, range: 6, count: 3, wis: true, desc: "Thunder answers: 7 + WIS damage to up to 3 foes." },
+  // --- bard ---
+  "inspire":       { name: "Inspire",         level: 1, cost: 4,  cd: 8,  kind: "buff", buff: { atk: 2, dex: 2, turns: 8 }, desc: "A rousing refrain: ATK +2, DEX +2 for 8 turns." },
+  "lullaby":       { name: "Lullaby",         level: 2, cost: 5,  cd: 4,  kind: "bolt", power: 3, range: 5, stun: 2, wis: true, desc: "A soft song: 3 + WIS damage, stuns 2 turns." },
+  "discord":       { name: "Discord",         level: 4, cost: 6,  cd: 3,  kind: "bolt", power: 7, range: 5, desc: "A clashing chord: 7 + INT damage." },
+  "martial-cadence":{ name: "Martial Cadence", level: 6, cost: 8,  cd: 9,  kind: "buff", buff: { atk: 4, turns: 4 }, desc: "March-time fury: ATK +4 for 4 turns." },
+  "crescendo":     { name: "Crescendo",       level: 7, cost: 11, cd: 6,  kind: "multi-bolt", power: 6, range: 5, count: 3, desc: "The song peaks: 6 + INT damage to up to 3 foes." },
+  // --- monk ---
+  "flurry":        { name: "Flurry",          level: 1, cost: 5,  cd: 4,  kind: "melee-all", power: 0.9, desc: "A blur of fists: 0.9x weapon damage to ALL adjacent foes." },
+  "ki-mend":       { name: "Ki Mend",         level: 2, cost: 5,  cd: 5,  kind: "self-heal", power: 0.2, wis: true, desc: "Breath and blood: 20% max HP + WIS." },
+  "stun-palm":     { name: "Stun Palm",       level: 3, cost: 6,  cd: 4,  kind: "bolt", power: 4, range: 1, stun: 2, dex: true, desc: "A strike between the ribs: 4 + DEX damage, stuns 2 turns." },
+  "evasion":       { name: "Evasion",         level: 4, cost: 6,  cd: 8,  kind: "buff", buff: { def: 6, turns: 4 }, desc: "Like water: DEF +6 for 4 turns." },
+  "whirlwind":     { name: "Whirlwind",       level: 7, cost: 10, cd: 6,  kind: "melee-all", power: 1.5, desc: "Spinning palms: 1.5x weapon damage to ALL adjacent foes." },
+  // --- sorcerer ---
+  "scorcher":      { name: "Scorcher",        level: 1, cost: 2,  cd: 0,  kind: "bolt", power: 5, range: 5, desc: "Blood-fire: 5 + INT damage. Cheap and free of cooldown." },
+  "spell-ward":    { name: "Spell Ward",      level: 3, cost: 6,  cd: 8,  kind: "buff", buff: { def: 5, turns: 4 }, desc: "A shimmering shell: DEF +5 for 4 turns." },
+  "wild-surge":    { name: "Wild Surge",      level: 4, cost: 9,  cd: 6,  kind: "bolt", power: 10, range: 4, desc: "Raw magic lurches loose: 10 + INT damage." },
+  "dragon-breath": { name: "Dragon's Breath", level: 7, cost: 12, cd: 6,  kind: "multi-bolt", power: 7, range: 4, count: 3, desc: "A cone of fire: 7 + INT damage to up to 3 foes." }
 };
 
 // Spellbooks teach their skill to any class at the required level.
@@ -101,7 +176,11 @@ export const SPELLBOOKS = {
   "book-barrier":{ name: "Book of Arcane Barrier",teaches: "arcane-barrier", reqLevel: 4, glyph: "=", color: "#a0ffd8", icon: "delapouite__spell-book" },
   "book-heal":   { name: "Book of Healing",     teaches: "heal",   reqLevel: 2, glyph: "=", color: "#c8ffc8", icon: "delapouite__spell-book" },
   "book-volley": { name: "Book of Volley",      teaches: "volley", reqLevel: 5, glyph: "=", color: "#ffd8a0", icon: "delapouite__spell-book" },
-  "book-ward":   { name: "Book of Warding",     teaches: "elemental-ward", reqLevel: 6, glyph: "=", color: "#b0ffd8", icon: "delapouite__spell-book" }
+  "book-ward":   { name: "Book of Warding",     teaches: "elemental-ward", reqLevel: 6, glyph: "=", color: "#b0ffd8", icon: "delapouite__spell-book" },
+  "book-entangle":{ name: "Book of Entangling", teaches: "entangle",     reqLevel: 4, glyph: "=", color: "#a0d8a0", icon: "delapouite__spell-book" },
+  "book-lullaby": { name: "Book of Lullabies",  teaches: "lullaby",      reqLevel: 2, glyph: "=", color: "#d8b0e8", icon: "delapouite__spell-book" },
+  "book-warcry":  { name: "Book of War Cry",    teaches: "warcry",       reqLevel: 1, glyph: "=", color: "#e0a080", icon: "delapouite__spell-book" },
+  "book-dragon":  { name: "Book of Dragon Fire",teaches: "dragon-breath",reqLevel: 7, glyph: "=", color: "#ff9060", icon: "delapouite__spell-book" }
 };
 
 export const WEAPONS = [
@@ -444,5 +523,9 @@ export const SHOP = [
   { key: "book:book-frost", name: "Book of Frost Shock", price: 180, vendor: "sage" },
   { key: "book:book-heal", name: "Book of Healing", price: 160, vendor: "sage" },
   { key: "book:book-smite", name: "Book of Divine Smite", price: 220, vendor: "sage" },
-  { key: "book:book-volley", name: "Book of Volley", price: 210, vendor: "sage" }
+  { key: "book:book-volley", name: "Book of Volley", price: 210, vendor: "sage" },
+  { key: "book:book-warcry", name: "Book of War Cry", price: 90, vendor: "sage" },
+  { key: "book:book-lullaby", name: "Book of Lullabies", price: 140, vendor: "sage" },
+  { key: "book:book-entangle", name: "Book of Entangling", price: 180, vendor: "sage" },
+  { key: "book:book-dragon", name: "Book of Dragon Fire", price: 260, vendor: "sage" }
 ];
