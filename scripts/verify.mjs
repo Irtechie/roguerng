@@ -871,17 +871,31 @@ async function walkTo(page, tx, ty, limit = 300) {
     c.player.equipment.weapon = { uid: "wp", kind: "weapon", slot: "weapon", id: "longsword", name: "Test Sword", dmg: 6, ident: true };
     await raf(); await raf();
     out.heroWeapon = g.heroGear().weapon;
-    // opening the pack reveals the equipment doll
+    // opening the pack reveals the equipment doll, facing front, with slot tiles
     document.getElementById("inv").classList.remove("open");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
     await raf(); await raf();
     out.dollOpen = g.dollOpen();
-    out.dollSlots = (document.getElementById("dollSlots").textContent || "").trim();
+    out.dollYaw = g.dollYaw();
+    out.dollSlots = document.getElementById("dollSlots").innerHTML || "";
+    // dragging the doll spins it
+    const cv = document.getElementById("dollCanvas");
+    const r = cv.getBoundingClientRect();
+    cv.setPointerCapture = () => {};
+    cv.releasePointerCapture = () => {};
+    const pe = (t, x) => cv.dispatchEvent(new PointerEvent(t, { pointerId: 1, clientX: x, clientY: r.top + 40, bubbles: true }));
+    pe("pointerdown", r.left + 20);
+    pe("pointermove", r.left + 110);
+    pe("pointerup", r.left + 110);
+    out.dollYawAfter = g.dollYaw();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "i", bubbles: true }));
     return out;
   });
-  check("gear look: spells are tradition-locked (Identify general), armor swaps rig, weapon rides hand, pack shows doll",
+  check("gear look: spells are tradition-locked (Identify general), armor swaps rig, weapon rides hand, pack doll faces front with slots and drags to spin",
     gear.frostBlocked && gear.identLearned && gear.robesHero === "Mage" && gear.plateHero === "Knight" &&
-    gear.heroWeapon === "longsword" && gear.dollOpen && /Test Plate|longsword|Sword/i.test(gear.dollSlots),
+    gear.heroWeapon === "longsword" && gear.dollOpen && gear.dollYaw === 0 &&
+    Math.abs(gear.dollYawAfter - gear.dollYaw) > 0.05 &&
+    /Wield/.test(gear.dollSlots) && /Wear/.test(gear.dollSlots) && /Ward/.test(gear.dollSlots) && /Test Plate/.test(gear.dollSlots),
     JSON.stringify(gear));
 
   const pickerTest = await page.evaluate(async () => {

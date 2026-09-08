@@ -1342,7 +1342,22 @@ function renderLog() {
 }
 // ---------- equipment doll ----------
 
-let dollRenderer = null, dollScene = null, dollCam = null, dollGroup = null, dollSig = null;
+let dollRenderer = null, dollScene = null, dollCam = null, dollGroup = null, dollSig = null, dollYaw = 0;
+
+el("dollCanvas").addEventListener("pointerdown", e => {
+  const cv = el("dollCanvas");
+  let lastX = e.clientX;
+  cv.setPointerCapture(e.pointerId);
+  cv.style.cursor = "grabbing";
+  const move = ev => { dollYaw += (ev.clientX - lastX) * 0.012; lastX = ev.clientX; };
+  const up = () => {
+    cv.style.cursor = "grab";
+    cv.removeEventListener("pointermove", move);
+    cv.removeEventListener("pointerup", up);
+  };
+  cv.addEventListener("pointermove", move);
+  cv.addEventListener("pointerup", up);
+});
 
 function ensureDoll() {
   const p = core.player;
@@ -1366,13 +1381,15 @@ function ensureDoll() {
     dollGroup = makePlayerVoxel(p.classId, CLASSES[p.classId].color, p.raceId, p.equipment);
     dollScene.add(dollGroup);
     dollSig = sig;
+    dollYaw = 0;
   }
   const eq = p.equipment;
-  const line = (label, it) => `<div class="sl">${label}: ` + (it
-    ? `<img src="assets/img/${it.icon || "delapouite__glowing-artifact"}.png" class="ic"> <b>${it.name}</b>` +
-      (it.affixes && it.affixes.length ? ` <span style="color:#7ddfff">(${it.affixes.map(a => a.name).join(", ")})</span>` : "")
-    : "none") + "</div>";
-  el("dollSlots").innerHTML = line("Wield", eq.weapon) + line("Wear", eq.armor) + line("Ward", eq.trinket);
+  const tile = (label, it) =>
+    `<div class="tile" title="${it ? it.name + (it.affixes && it.affixes.length ? " (" + it.affixes.map(a => a.name).join(", ") + ")" : "") : "empty"}">` +
+    `<span class="tl">${label}</span>` +
+    (it ? `<img src="assets/img/${it.icon || "delapouite__glowing-artifact"}.png" class="ic">` : "") +
+    "</div>";
+  el("dollSlots").innerHTML = tile("Wield", eq.weapon) + tile("Wear", eq.armor) + tile("Ward", eq.trinket);
 }
 
 function renderInventory(s) {
@@ -1683,7 +1700,7 @@ function loop() {
   if (playerSprite?.userData.mixer) playerSprite.userData.mixer.update(mdt);
   if (dollGroup && el("inv").classList.contains("open") && core.screen === "play") {
     if (dollGroup.userData.mixer) dollGroup.userData.mixer.update(mdt);
-    dollGroup.rotation.z += mdt * 0.8;
+    dollGroup.rotation.z = dollYaw;
     dollRenderer.render(dollScene, dollCam);
   }
   const px = wx(core.player.x, mapDims.w), py = wy(core.player.y, mapDims.h);
@@ -1739,6 +1756,7 @@ window.game = {
   heroAngle: () => playerSprite ? playerSprite.rotation.z : null,
   heroScale: () => playerSprite ? +playerSprite.scale.x.toFixed(2) : null,
   dollOpen: () => el("inv").classList.contains("open") && !!dollGroup,
+  dollYaw: () => (dollGroup ? +dollYaw.toFixed(3) : null),
   heroGear: () => playerSprite ? { sig: playerSprite.userData.gearSig || null, weapon: playerSprite.userData.weaponProp || null } : null,
   setBloom: s => { bloomPass.strength = s; return bloomPass.strength; },
   debugPost: () => ({
