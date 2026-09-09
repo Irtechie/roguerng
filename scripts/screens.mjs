@@ -52,6 +52,7 @@ await page.evaluate(() => {
   window.game.travel("town");
   const inv = document.getElementById("inv");
   inv.classList.add("open");
+  document.getElementById("doll").classList.add("open");
   window.game.afterAction();
 });
 await sleep(700);

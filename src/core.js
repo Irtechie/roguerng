@@ -72,13 +72,14 @@ export class Core {
       worldSeed: Math.floor(this.rng() * 1e9),
       attrs, hp: 1, mp: 0, gold: 15, turnsSinceDamage: 99,
       x: 18, y: 14, mapKey: TOWN_KEY, facing: { dx: 1, dy: 0 }, cameFrom: {},
-      skills: [cls.skills[0]], cooldowns: {}, buffs: [],
+      skills: [cls.skills[0]], cooldowns: {}, buffs: [], hotbar: Array(12).fill(null),
       equipment: { weapon: starterWeapon(classId), armor: starterArmor(classId), trinket: null },
       bag: classId === "mage" ? [makePotion(), makeManaPotion()] : [makePotion(), makePotion()],
       quests: {}, questKills: {}, unlockedTiers: {}, unlockedMaps: ["greenhills"]
     };
     for (const mapId of Object.keys(MAPS))
       this.player.quests[MAPS[mapId].quest.id] = { progress: 0, done: false, turnedIn: false };
+    for (const id of this.player.skills) this.autoPlaceSkill(id);
     this.eff();
     this.player.hp = this.eff().maxHp;
     this.player.mp = this.eff().maxMp;
@@ -294,7 +295,8 @@ export class Core {
     let tookTurn = false;
     switch (action.type) {
       case "move": tookTurn = this.doMove(action.dx, action.dy); break;
-      case "skill": tookTurn = this.doSkill(action.slot); break;
+      case "skill": tookTurn = this.doSkill(action.slot, action.dir); break;
+      case "bindHotbar": this.bindHotbar(action.slot, action.skillId); break;
       case "interact": tookTurn = this.doInteract(); break;
       case "descend": this.doDescend(); break;
       case "ascend": this.doAscend(); break;
@@ -472,6 +474,7 @@ export class Core {
     for (const id of cls.skills) {
       if (!p.skills.includes(id) && SKILLS[id].level <= p.level) {
         p.skills.push(id);
+        this.autoPlaceSkill(id);
         this.say(`New ability: ${SKILLS[id].name}!`, "#7ddfff");
       }
     }
@@ -480,7 +483,7 @@ export class Core {
     this.say(`LEVEL ${p.level}!`, "#ffd700");
   }
 
-  doSkill(slot) {
+  doSkill(slot, dir) {
     const p = this.player, id = p.skills[slot];
     if (!id) return false;
     const s = SKILLS[id];
@@ -489,8 +492,15 @@ export class Core {
     const e = this.eff();
     const map = this.getMap();
     const monsters = map.entities.filter(x => x.type === "monster" && x.hp > 0);
-    const adj = monsters.filter(m => Math.abs(m.x - p.x) + Math.abs(m.y - p.y) === 1);
-    const near = monsters.filter(m => dist(m, p) <= (s.range || 1)).sort((a, b) => dist(a, p) - dist(b, p));
+    const adjAll = monsters.filter(m => Math.abs(m.x - p.x) + Math.abs(m.y - p.y) === 1);
+    const nearAll = monsters.filter(m => dist(m, p) <= (s.range || 1)).sort((a, b) => dist(a, p) - dist(b, p));
+    // Directional aiming (arrow keys / click-a-direction): prefer foes along that ray.
+    const aimed = !!(dir && (dir.dx || dir.dy));
+    const inDir = m => (m.x - p.x) * dir.dy === (m.y - p.y) * dir.dx
+      && (m.x - p.x) * dir.dx + (m.y - p.y) * dir.dy > 0;
+    const adj = aimed ? adjAll.filter(inDir) : adjAll;
+    const near = aimed ? nearAll.filter(inDir) : nearAll;
+    const fail = aimed ? "Nothing worth striking that way." : null;
     p.mp -= s.cost;
     p.cooldowns[id] = s.cd + 1;
     switch (s.kind) {
@@ -509,11 +519,11 @@ export class Core {
         break;
       }
       case "melee":
-        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foe in reach.", "#ff9090"); return false; }
+        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say(fail || "No foe in reach.", "#ff9090"); return false; }
         this.playerAttack(adj[0], s.power || 1.8);
         break;
       case "melee-all":
-        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No foes in reach.", "#ff9090"); return false; }
+        if (!adj.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say(fail || "No foes in reach.", "#ff9090"); return false; }
         for (const m of adj) this.playerAttack(m, s.power);
         break;
       case "self-heal": {
@@ -528,7 +538,7 @@ export class Core {
         break;
       case "bolt": {
         const t = near[0];
-        if (!t) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No target in range.", "#ff9090"); return false; }
+        if (!t) { p.mp += s.cost; p.cooldowns[id] = 2; this.say(fail || "No target in range.", "#ff9090"); return false; }
         const dmg = s.power + (s.dex ? e.dex : s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
         t.hp -= dmg;
         this.say(`${s.name} sears ${t.name} for ${dmg}!`, "#ffb060");
@@ -538,7 +548,7 @@ export class Core {
       }
       case "multi-bolt": {
         const targets = near.slice(0, s.count);
-        if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say("No targets in range.", "#ff9090"); return false; }
+        if (!targets.length) { p.mp += s.cost; p.cooldowns[id] = 2; this.say(fail || "No targets in range.", "#ff9090"); return false; }
         for (const t of targets) {
           const dmg = s.power + (s.dex ? e.dex : s.wis ? e.wis : e.int) + this.rng() * 3 | 0;
           t.hp -= dmg;
@@ -550,6 +560,38 @@ export class Core {
       }
       default: return false;
     }
+    return true;
+  }
+
+  // ---------- hotbar (12 slots: 1-6 auto-filled, all rebindable) ----------
+
+  ensureHotbar() {
+    const p = this.player;
+    if (!p) return [];
+    if (!Array.isArray(p.hotbar) || p.hotbar.length !== 12) {
+      const old = Array.isArray(p.hotbar) ? p.hotbar : [];
+      p.hotbar = Array.from({ length: 12 }, (_, i) => old[i] ?? null);
+    }
+    // prune bindings for skills no longer known
+    for (let i = 0; i < 12; i++) if (p.hotbar[i] && !p.skills.includes(p.hotbar[i])) p.hotbar[i] = null;
+    return p.hotbar;
+  }
+
+  autoPlaceSkill(id) {
+    const bar = this.ensureHotbar();
+    if (bar.includes(id)) return;
+    const free = bar.indexOf(null);
+    if (free >= 0) bar[free] = id;
+  }
+
+  bindHotbar(slot, skillId) {
+    const bar = this.ensureHotbar();
+    if (slot < 0 || slot >= 12) return false;
+    if (skillId !== null && !this.player.skills.includes(skillId)) { this.say("You have not learned that yet."); return false; }
+    // if the skill is bound elsewhere, swap the two slots
+    const prev = bar.indexOf(skillId);
+    if (prev >= 0 && prev !== slot) bar[prev] = bar[slot];
+    bar[slot] = skillId;
     return true;
   }
 
@@ -860,6 +902,7 @@ export class Core {
       }
       if (p.level < sb.reqLevel) { this.say(`You need level ${sb.reqLevel} to comprehend it.`); return; }
       p.skills.push(sb.teaches);
+      this.autoPlaceSkill(sb.teaches);
       p.bag.splice(idx, 1);
       this.say(`You study the ${sb.name} and learn ${SKILLS[sb.teaches].name}!`, "#7ddfff");
     }
@@ -969,6 +1012,7 @@ export class Core {
     this.seed = data.seed;
     this.kills = data.kills || 0;
     this.player = data.player;
+    this.ensureHotbar();
     this.screen = "play";
     this.dead = false;
     this.maps = new Map((data.maps || []).map(m => [m.key, { ...m, floors: null }]));

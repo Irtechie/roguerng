@@ -9,7 +9,7 @@ import { RenderPass } from "../vendor/examples/jsm/postprocessing/RenderPass.js"
 import { UnrealBloomPass } from "../vendor/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "../vendor/examples/jsm/postprocessing/OutputPass.js";
 import { Core, sellPrice } from "./core.js";
-import { RACES, CLASSES, SHOP, VENDORS } from "./data.js";
+import { RACES, CLASSES, SHOP, VENDORS, SKILLS } from "./data.js";
 
 const urlSeed = new URLSearchParams(location.search).get("seed");
 const core = new Core(urlSeed ? Number(urlSeed) : (Date.now() & 0xffffff));
@@ -1335,11 +1335,93 @@ function renderHud() {
   el("skills").innerHTML = p.skills.map((sk, i) =>
     `<span class="sk ${sk.cd || p.mp < sk.cost ? "dim" : ""}">[${i + 1}] ${sk.name} (${sk.cost}mp${sk.cd ? ", cd " + sk.cd : ""})</span>`).join("<br>");
   renderInventory(s);
+  renderHotbar();
 }
 function renderLog() {
   el("log").innerHTML = core.log.slice(-8).map(l => `<div style="color:${l.color}">${l.text}</div>`).join("");
   el("log").scrollTop = el("log").scrollHeight;
 }
+
+// ---------- hotbar (12 slots, keys 1-9/0 cast, shift+arrows aim, right-click binds) ----------
+
+let hbSel = 0;
+const HOTKEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+const AIMDIR = { ArrowUp: { dx: 0, dy: -1 }, ArrowDown: { dx: 0, dy: 1 }, ArrowLeft: { dx: -1, dy: 0 }, ArrowRight: { dx: 1, dy: 0 } };
+
+function renderHotbar() {
+  const bar = el("hotbar");
+  if (!core.player) return;
+  const p = core.player;
+  const ids = core.ensureHotbar();
+  bar.innerHTML = ids.map((id, i) => {
+    const info = id ? SKILLS[id] : null;
+    const cd = id ? (p.cooldowns[id] || 0) : 0;
+    return `<div class="hb-slot ${i === hbSel ? "sel" : ""} ${info ? "" : "empty"} ${info && p.mp < info.cost ? "nomp" : ""}" data-slot="${i}" ` +
+      `title="${info ? info.name + " · " + info.cost + " mp · click cast · Shift+arrows aims selected slot · right-click binds" : "empty slot · click or right-click to bind a skill"}">` +
+      `<span class="hb-key">${HOTKEYS[i]}</span>` +
+      (info ? `<img class="ic" src="assets/img/${info.icon}.png" alt="">` : "") +
+      (cd > 0 ? `<span class="hb-cd">${cd}</span>` : "") +
+      (info ? `<span class="dir u" data-dir="0,-1">^</span><span class="dir d" data-dir="0,1">v</span>` +
+              `<span class="dir l" data-dir="-1,0">&lt;</span><span class="dir r" data-dir="1,0">&gt;</span>` : "") +
+      `</div>`;
+  }).join("");
+}
+
+function castHot(i, dir) {
+  const p = core.player;
+  if (!p) return;
+  const id = core.ensureHotbar()[i];
+  if (!id) { openHotbarPicker(i); return; }
+  const slot = p.skills.indexOf(id);
+  if (slot < 0) return;
+  if (id === "identify" && unidentifiedGear().length > 1) { openIdentPicker("free"); afterAction(); return; }
+  core.act({ type: "skill", slot, dir });
+  afterAction();
+}
+
+function openHotbarPicker(i) {
+  const p = core.player;
+  if (!p) return;
+  const panel = el("hbPick");
+  panel.dataset.slot = String(i);
+  panel.innerHTML = `<div class="pp-title">Slot ${i + 1} &mdash; bind which skill?</div>` +
+    p.skills.map(id =>
+      `<button data-bind="${id}" class="${p.hotbar[i] === id ? "on" : ""}"><img class="ic" src="assets/img/${SKILLS[id].icon}.png"> ${SKILLS[id].name}</button>`).join("") +
+    `<button data-bind="">clear slot</button>`;
+  panel.style.display = "block";
+}
+
+el("hotbar").addEventListener("click", e => {
+  const slotEl = e.target.closest(".hb-slot");
+  if (!slotEl) return;
+  const i = Number(slotEl.dataset.slot);
+  hbSel = i;
+  const dirEl = e.target.closest(".dir");
+  if (dirEl) {
+    const [dx, dy] = dirEl.dataset.dir.split(",").map(Number);
+    castHot(i, { dx, dy });
+    return;
+  }
+  const id = core.player?.hotbar?.[i];
+  if (!id) openHotbarPicker(i);
+  else castHot(i, null);
+});
+el("hotbar").addEventListener("contextmenu", e => {
+  const slotEl = e.target.closest(".hb-slot");
+  if (!slotEl) return;
+  e.preventDefault();
+  openHotbarPicker(Number(slotEl.dataset.slot));
+});
+el("hbPick").addEventListener("click", e => {
+  const b = e.target.closest("button[data-bind]");
+  if (!b) return;
+  const i = Number(el("hbPick").dataset.slot);
+  const skillId = b.dataset.bind || null;
+  core.act({ type: "bindHotbar", slot: i, skillId });
+  el("hbPick").style.display = "none";
+  if (skillId) hbSel = i;
+  afterAction();
+});
 // ---------- equipment doll ----------
 
 let dollRenderer = null, dollScene = null, dollCam = null, dollGroup = null, dollSig = null, dollYaw = 0;
@@ -1366,9 +1448,9 @@ function ensureDoll() {
   if (!dollRenderer) {
     dollRenderer = new THREE.WebGLRenderer({ canvas: el("dollCanvas"), alpha: true, antialias: true });
     dollRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    dollRenderer.setSize(150, 210, false);
+    dollRenderer.setSize(200, 280, false);
     dollScene = new THREE.Scene();
-    dollCam = new THREE.PerspectiveCamera(34, 150 / 210, 0.1, 20);
+    dollCam = new THREE.PerspectiveCamera(34, 200 / 280, 0.1, 20);
     dollCam.position.set(0.5, -3.1, 1.2);
     dollCam.lookAt(0, 0, 0.85);
     dollScene.add(new THREE.HemisphereLight(0x8899cc, 0x10131c, 1.2));
@@ -1622,7 +1704,8 @@ el("continue").addEventListener("click", () => tryContinue());
 
 function afterAction() {
   if (core.screen !== "play" || !core.player) return;
-  el("stats").style.display = el("skills").style.display = "block";
+  el("stats").style.display = "block";
+  el("skills").style.display = "none"; // replaced by the icon hotbar
   const map = core.getMap(core.player.mapKey);
   if (map.key !== loadedKey) { loadedKey = map.key; buildMapMeshes(map); }
   el("shop").style.display = core.nearbyVendor() ? "block" : "none";
@@ -1660,27 +1743,32 @@ window.addEventListener("keydown", e => {
   if (core.screen !== "play") return;
   autoGen++;
   if (core.dead) { if (e.key === "Enter") { core.act({ type: "revive" }); afterAction(); } return; }
+  if (e.shiftKey && AIMDIR[e.key]) { castHot(hbSel, AIMDIR[e.key]); e.preventDefault(); return; }
   if (MOVE[e.key]) { core.act({ type: "move", dx: MOVE[e.key][0], dy: MOVE[e.key][1] }); afterAction(); e.preventDefault(); }
-  else if (e.key === "." || e.key === "5") { core.act({ type: "move", dx: 0, dy: 0 }); afterAction(); }
+  else if (e.key === ".") { core.act({ type: "move", dx: 0, dy: 0 }); afterAction(); }
   else if (e.key === "e" || e.key === "E") { core.act({ type: "interact" }); afterAction(); }
   else if (e.key === ">" || e.key === ">") { core.act({ type: "descend" }); afterAction(); }
   else if (e.key === "<" || e.key === ",") { core.act({ type: "ascend" }); afterAction(); }
-  else if (e.key === "i" || e.key === "I") { el("inv").classList.toggle("open"); renderHud(); }
+  else if (e.key === "i" || e.key === "I") {
+    const open = el("inv").classList.toggle("open");
+    el("doll").classList.toggle("open", open);
+    renderHud();
+  }
   else if (e.key === "b" || e.key === "B") {
     if (el("bestiary").style.display === "block") el("bestiary").style.display = "none";
     else renderBestiary();
   }
-  else if (e.key === "Escape") el("bestiary").style.display = "none";
+  else if (e.key === "Escape") { el("bestiary").style.display = "none"; el("hbPick").style.display = "none"; }
   else if (e.key === "m" || e.key === "M") {
     mapOpen = !mapOpen;
     mmCanvas.style.display = mapOpen ? "block" : "none";
     drawMinimap();
   }
-  else if (/^[1-6]$/.test(e.key)) {
-    const slot = Number(e.key) - 1;
-    if (core.player?.skills[slot] === "identify" && unidentifiedGear().length > 1) openIdentPicker("free");
-    else core.act({ type: "skill", slot });
-    afterAction();
+  else if (HOTKEYS.includes(e.key)) {
+    const slot = HOTKEYS.indexOf(e.key);
+    hbSel = slot;
+    if (core.player?.hotbar?.[slot] === "identify" && unidentifiedGear().length > 1) openIdentPicker("free");
+    else castHot(slot, null);
   }
 });
 
@@ -1757,6 +1845,12 @@ window.game = {
   heroScale: () => playerSprite ? +playerSprite.scale.x.toFixed(2) : null,
   dollOpen: () => el("inv").classList.contains("open") && !!dollGroup,
   dollYaw: () => (dollGroup ? +dollYaw.toFixed(3) : null),
+  hotbar: () => (core.player ? core.ensureHotbar().slice() : null),
+  hotbarSlots: () => el("hotbar").querySelectorAll(".hb-slot").length,
+  hotPickOpen: () => el("hbPick").style.display === "block",
+  hotCast: i => castHot(i, null),
+  hotAim: (dx, dy) => castHot(hbSel, { dx, dy }),
+  bindHot: (slot, skillId) => core.act({ type: "bindHotbar", slot, skillId }),
   heroGear: () => playerSprite ? { sig: playerSprite.userData.gearSig || null, weapon: playerSprite.userData.weaponProp || null } : null,
   setBloom: s => { bloomPass.strength = s; return bloomPass.strength; },
   debugPost: () => ({

@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { chromium } from "playwright";
+import { SKILLS } from "../src/data.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".png": "image/png" };
@@ -897,6 +898,43 @@ async function walkTo(page, tx, ty, limit = 300) {
     Math.abs(gear.dollYawAfter - gear.dollYaw) > 0.05 &&
     /Wield/.test(gear.dollSlots) && /Wear/.test(gear.dollSlots) && /Ward/.test(gear.dollSlots) && /Test Plate/.test(gear.dollSlots),
     JSON.stringify(gear));
+
+  const skillIconGaps = Object.entries(SKILLS)
+    .filter(([, s]) => !s.icon || !fs.existsSync(path.join(ROOT, "assets/img", s.icon + ".png")))
+    .map(([id]) => id);
+  check("every skill has a bundled icon", skillIconGaps.length === 0, JSON.stringify(skillIconGaps.slice(0, 6)));
+
+  const bar = await page.evaluate(() => {
+    const g = window.game, c = g.core, p = c.player;
+    const out = {};
+    out.slots = g.hotbarSlots();
+    out.barLen = g.hotbar().length;
+    out.bound = g.hotbar().filter(Boolean).length;
+    const idSlot = g.hotbar().indexOf("identify");
+    g.bindHot(5, "identify");
+    out.swapped = idSlot === 5 || (p.hotbar[5] === "identify" && p.hotbar[idSlot] === null);
+    g.bindHot(idSlot, "identify");
+    out.restored = p.hotbar[idSlot] === "identify" && p.hotbar[5] === null;
+    out.arrows = document.querySelectorAll(".hb-slot .dir").length;
+    out.imgs = document.querySelectorAll(".hb-slot img.ic").length;
+    const map = c.getMap();
+    const m = map.entities.find(e => e.type === "monster" && e.hp > 0);
+    const idx = p.skills.indexOf("entangle");
+    if (!m || idx < 0 || map.grid[m.y][m.x - 1] !== ".") return Object.assign(out, { skip: true });
+    p.x = m.x - 1; p.y = m.y; p.mp = 99; p.cooldowns = {};
+    const hp0 = m.hp;
+    const hit = c.act({ type: "skill", slot: idx, dir: { dx: 1, dy: 0 } });
+    out.aimHit = hit === true && m.hp < hp0;
+    p.cooldowns = {};
+    const hp1 = m.hp;
+    const miss = c.act({ type: "skill", slot: idx, dir: { dx: -1, dy: 0 } });
+    out.aimMiss = miss === false && m.hp === hp1;
+    return out;
+  });
+  check("hotbar: 12 bindable slots with swap semantics; arrow aims cast along that ray only",
+    bar.slots === 12 && bar.barLen === 12 && bar.bound >= 1 && bar.swapped && bar.restored &&
+    bar.arrows >= 4 && bar.imgs >= 1 && (bar.skip || (bar.aimHit && bar.aimMiss)),
+    JSON.stringify(bar));
 
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;

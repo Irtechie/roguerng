@@ -48,7 +48,19 @@ export const ICONS = [
   "skoll/orc", "delapouite/orc", "lorc/orc", "lorc/gnome", "delapouite/gnome",
   "lorc/hobbit", "delapouite/hobbit", "delapouite/halfling", "lorc/halfling",
   "delapouite/yin-yang", "lorc/yin-yang", "delapouite/open-fist", "lorc/fist",
-  "delapouite/glasses", "lorc/glasses", "lorc/wand", "delapouite/wand"
+  "delapouite/glasses", "lorc/glasses", "lorc/wand", "delapouite/wand",
+  // skill bar icons; unknown slugs are skipped, not fatal
+  "sbed/regeneration", "delapouite/enrage", "lorc/axe-swing", "carl-olsen/flame",
+  "delapouite/vibrating-shield", "willdabeast/chain-lightning", "delapouite/healing",
+  "lorc/angel-wings", "delapouite/thor-hammer", "delapouite/templar-shield",
+  "lorc/magic-palm", "lorc/holy-symbol", "delapouite/polar-star", "lorc/spiked-halo",
+  "lorc/archery-target", "delapouite/vines", "lorc/targeting", "lorc/arrow-cluster",
+  "delapouite/barrier", "lorc/sonic-shout", "lorc/quake-stomp", "lorc/tree-branch",
+  "lorc/thorny-vine", "lorc/vine-flower", "lorc/curling-vines", "lorc/lightning-storm",
+  "lorc/lyre", "delapouite/pan-flute", "lorc/sonic-screech", "delapouite/drum",
+  "delapouite/musical-notes", "skoll/open-palm", "felbrigg/dodge", "lorc/whirlwind",
+  "sbed/flamer", "lorc/bolt-shield", "delapouite/exploding-planet", "lorc/dragon-breath",
+  "lorc/magnifying-glass", "lorc/ice-bolt"
 ];
 
 function get(url, redirects = 3) {
