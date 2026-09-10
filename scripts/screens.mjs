@@ -37,6 +37,14 @@ await page.evaluate(() => { window.game.core.player.level = 10; });
 await sleep(600);
 await page.screenshot({ path: path.join(OUT, "02-town.png") });
 
+await page.evaluate(() => {
+  window.game.core.player.level = 10;
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+});
+await sleep(400);
+await page.screenshot({ path: path.join(OUT, "07-waygates.png") });
+await page.evaluate(() => { document.getElementById("travel").style.display = "none"; });
+
 for (const [i, mapId] of ["greenhills", "darkfang", "ashfall"].entries()) {
   await page.evaluate(m => {
     const g = window.game;

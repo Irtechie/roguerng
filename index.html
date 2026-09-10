@@ -84,6 +84,16 @@
   #hbPick button:hover { background: #33447a; }
   #hbPick button.on { border-color: #ffd24d; }
   #hbPick .ic { height: 16px; }
+  #travel { top: 150px; left: 10px; width: 330px; display: none; z-index: 7; max-height: 55vh; overflow: auto; }
+  #travel h3 { margin: 0 0 6px; color: #ffd24d; font-size: 13px; }
+  #travel .tr-map { margin: 6px 0; border-top: 1px solid #22304e; padding-top: 5px; }
+  #travel .tr-map b { color: #cfe; }
+  #travel .tr-map b.lock { color: #667; }
+  #travel .tr-meta { display: block; color: #8ab; font-size: 11px; }
+  #travel .tr-btns { margin-top: 3px; }
+  #travel button { font: inherit; font-size: 10px; background: #22305a; color: #cfe; border: 1px solid #446; border-radius: 3px; cursor: pointer; padding: 2px 6px; margin: 1px 3px 1px 0; }
+  #travel button:hover { background: #33447a; }
+  #travel .tr-note { color: #976; font-size: 11px; margin-top: 6px; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js" } }
@@ -99,12 +109,13 @@
   <div id="skills" class="panel" style="display:none"></div>
   <div id="log" class="panel"></div>
   <div id="inv" class="panel"><div id="invList"></div></div>
+  <div id="travel" class="panel"></div>
   <div id="doll" class="panel"><h3>Equipment</h3><div id="dollWrap"><canvas id="dollCanvas" width="200" height="280"></canvas><div id="dollSlots"></div></div></div>
   <div id="hotbar"></div>
   <div id="hbPick" class="panel"></div>
   <div id="picker" class="panel"></div>
   <div id="bestiary" class="panel" style="display:none;max-height:70vh;overflow-y:auto"></div>
-  <div id="help" class="panel">WASD move &bull; skill bar: 1-9/0 cast, Shift+arrows aims the selected slot, hover a slot for click-arrows, right-click to rebind &bull; E talk/open &bull; &gt; descend &bull; &lt; climb up &bull; I pack &bull; B bestiary &bull; M map &bull; click to walk/use &bull; keys open chests/doors by walking into them &bull; merchants identify gear for 25g &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
+  <div id="help" class="panel">WASD move &bull; skill bar: 1-9/0 cast, Shift+arrows aims the selected slot, hover a slot for click-arrows, right-click to rebind &bull; E talk/open &bull; &gt; descend &bull; &lt; climb up &bull; I pack &bull; B bestiary &bull; T waygate travel &bull; M map &bull; click to walk/use &bull; keys open chests/doors by walking into them &bull; merchants identify gear for 25g &bull; . wait &bull; icons: <a style="color:#8ab" href="https://game-icons.net">game-icons.net</a> (CC-BY) &bull; <button id="saveBtn" style="font:inherit;font-size:11px;background:#22305a;color:#cfe;border:1px solid #446;border-radius:3px;cursor:pointer">Save</button></div>
 
   <div id="create">
     <div class="box">

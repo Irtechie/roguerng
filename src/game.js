@@ -9,7 +9,7 @@ import { RenderPass } from "../vendor/examples/jsm/postprocessing/RenderPass.js"
 import { UnrealBloomPass } from "../vendor/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "../vendor/examples/jsm/postprocessing/OutputPass.js";
 import { Core, sellPrice } from "./core.js";
-import { RACES, CLASSES, SHOP, VENDORS, SKILLS } from "./data.js";
+import { RACES, CLASSES, SHOP, VENDORS, SKILLS, MAPS } from "./data.js";
 
 const urlSeed = new URLSearchParams(location.search).get("seed");
 const core = new Core(urlSeed ? Number(urlSeed) : (Date.now() & 0xffffff));
@@ -1337,6 +1337,41 @@ function renderHud() {
   renderInventory(s);
   renderHotbar();
 }
+// ---------- travel waygates ----------
+
+function renderTravel() {
+  const s = core.status();
+  if (s.screen !== "play") return;
+  const t = s.travel;
+  const hereMap = t.here.split(":")[0];
+  let html = "<h3>Waygates</h3>";
+  for (const z of t.zones) {
+    const deepHere = t.inTown || hereMap === z.id; // dive from town or this zone's own grounds
+    const btns = [];
+    if (z.unlocked) {
+      if (t.inTown) btns.push(`<button data-travel="${z.id}">Grounds</button>`);
+      if (deepHere) for (let d = 1; d <= z.maxTier; d++) btns.push(`<button data-travel="${z.id}:${d}">Depth ${d}</button>`);
+    }
+    html += `<div class="tr-map"><b class="${z.unlocked ? "" : "lock"}">${z.name}</b>` +
+      `<span class="tr-meta">${z.unlocked ? `unsealed &middot; deepest open ${z.maxTier}/${z.tiers}` : `sealed until level ${z.unlockLevel}`}</span>` +
+      (btns.length ? `<div class="tr-btns">${btns.join("")}</div>` : "") + `</div>`;
+  }
+  if (!t.inTown && t.gateOpen) html += `<div class="tr-btns"><button data-travel="town">Return to Merrow Vale</button></div>`;
+  if (!t.gateOpen) html += `<div class="tr-note">No waygate answers this deep. Climb (&lt;) to the grounds first.</div>`;
+  const panel = el("travel");
+  panel.innerHTML = html;
+  panel.style.display = "block";
+}
+
+el("travel").addEventListener("click", e => {
+  const b = e.target.closest("button[data-travel]");
+  if (!b) return;
+  const [target, tier] = b.dataset.travel.split(":");
+  core.act({ type: "travel", target, tier: tier ? Number(tier) : undefined });
+  el("travel").style.display = "none";
+  afterAction();
+});
+
 function renderLog() {
   el("log").innerHTML = core.log.slice(-8).map(l => `<div style="color:${l.color}">${l.text}</div>`).join("");
   el("log").scrollTop = el("log").scrollHeight;
@@ -1758,7 +1793,11 @@ window.addEventListener("keydown", e => {
     if (el("bestiary").style.display === "block") el("bestiary").style.display = "none";
     else renderBestiary();
   }
-  else if (e.key === "Escape") { el("bestiary").style.display = "none"; el("hbPick").style.display = "none"; }
+  else if (e.key === "t" || e.key === "T") {
+    if (el("travel").style.display === "block") el("travel").style.display = "none";
+    else renderTravel();
+  }
+  else if (e.key === "Escape") { el("bestiary").style.display = "none"; el("hbPick").style.display = "none"; el("travel").style.display = "none"; }
   else if (e.key === "m" || e.key === "M") {
     mapOpen = !mapOpen;
     mmCanvas.style.display = mapOpen ? "block" : "none";

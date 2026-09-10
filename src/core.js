@@ -1064,6 +1064,13 @@ export class Core {
       },
       map: { key: map.key, name: map.name, kind: map.kind, tier: map.tier || 0, layout: map.arch !== undefined ? LAYOUT_NAMES_SHORT[map.arch] : "town",
         element: map.element || "none", elementName: ELEMENTS[map.element]?.name || null, elementColor: ELEMENTS[map.element]?.color || null },
+      travel: {
+        gateOpen: map.kind !== "dungeon", inTown: map.kind === "town", here: map.key,
+        zones: Object.entries(MAPS).map(([id, m]) => ({
+          id, name: m.name, unlockLevel: m.unlockLevel, tiers: m.tiers,
+          unlocked: p.level >= m.unlockLevel, maxTier: Math.min(p.unlockedTiers[id] || 1, m.tiers)
+        }))
+      },
       quests: Object.entries(p.quests).map(([id, q]) => {
         const mapId = Object.keys(MAPS).find(mid => MAPS[mid].quest.id === id);
         return { id, name: MAPS[mapId].quest.itemName, progress: q.progress, need: MAPS[mapId].quest.need, done: q.done, turnedIn: q.turnedIn };

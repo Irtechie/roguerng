@@ -936,6 +936,29 @@ async function walkTo(page, tx, ty, limit = 300) {
     bar.arrows >= 4 && bar.imgs >= 1 && (bar.skip || (bar.aimHit && bar.aimMiss)),
     JSON.stringify(bar));
 
+  const trip = await page.evaluate(() => {
+    const g = window.game, c = g.core, p = c.player;
+    const out = {};
+    if (c.dead) c.act({ type: "revive" });
+    g.travel("town");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+    const panel = document.getElementById("travel");
+    out.open = panel.style.display === "block";
+    out.rows = panel.querySelectorAll(".tr-map").length;
+    p.level = 14; p.unlockedTiers = { greenhills: 3 };
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "t" }));
+    const b = panel.querySelector('[data-travel="greenhills:2"]');
+    out.btn = !!b;
+    if (b) b.click();
+    out.mapKey = p.mapKey; out.tier = c.getMap().tier;
+    g.travel("town");
+    return out;
+  });
+  check("waygate window (T): lists zones with level gates; depth buttons jump straight to unlocked floors",
+    trip.open && trip.rows >= 3 && trip.btn && trip.mapKey === "greenhills:d2" && trip.tier === 2,
+    JSON.stringify(trip));
+
   const pickerTest = await page.evaluate(async () => {
     const g = window.game, c = g.core;
     g.create("fighter", "human", "Picks");
