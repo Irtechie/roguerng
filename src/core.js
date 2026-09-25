@@ -147,10 +147,19 @@ export class Core {
     const map = { key, kind: "dungeon", mapId, tier, arch, element: floorElement(mapId, tier), name: def.name, grid, floors, entities: [], stairs: null, spawn: null, w: grid[0].length, h: grid.length };
 
     map.spawn = floors[Math.floor(rng() * floors.length)];
-    let stairs = floors[0], bestD = -1;
+    // Stairs prefer a 3-sided wall pocket (an open-front alcove: wall behind
+    // and on both flanks), then a corner, then a bare hug — the farther from
+    // the entry, the better. Free-standing stairs in the middle of a hall read
+    // as a random arch and are hard to spot or path to.
+    const isWallCell = (x, y) => x < 0 || y < 0 || y >= map.h || x >= map.w || grid[y][x] !== ".";
+    let stairs = floors[0], bestScore = -1;
     for (const f of floors) {
-      const d = Math.abs(f.x - map.spawn.x) + Math.abs(f.y - map.spawn.y);
-      if (d > bestD) { bestD = d; stairs = f; }
+      const walls = isWallCell(f.x, f.y - 1) + isWallCell(f.x, f.y + 1) +
+        isWallCell(f.x + 1, f.y) + isWallCell(f.x - 1, f.y);
+      if (!walls) continue;
+      const score = walls * 10000 +
+        Math.abs(f.x - map.spawn.x) + Math.abs(f.y - map.spawn.y);
+      if (score > bestScore) { bestScore = score; stairs = f; }
     }
     map.stairs = stairs;
     let portalCell = map.spawn;
@@ -1243,6 +1252,26 @@ function makeScrollIdentify() {
 function makeManaPotion() {
   return { uid: nextUid(), kind: "potion", effect: "mana", name: "Blue Potion", glyph: "!", color: "#7090ff", icon: "delapouite__magic-potion", ident: true };
 }
+// Which way the staircase backs into the masonry. Prefers a true alcove
+// (wall behind AND on both flanks, single open front — a |stairs| niche) and
+// falls back to any adjacent wall. Returns "N"|"S"|"E"|"W" or null when the
+// stairs stand free (only possible on older saved floors).
+export function stairsBackDir(map) {
+  if (!map || !map.stairs) return null;
+  const wall = (x, y) => x < 0 || y < 0 || y >= map.h || x >= map.w || map.grid[y][x] !== ".";
+  const { x, y } = map.stairs;
+  const wN = wall(x, y - 1), wS = wall(x, y + 1), wW = wall(x - 1, y), wE = wall(x + 1, y);
+  if (!wN && wS && wW && wE) return "N";
+  if (!wS && wN && wW && wE) return "S";
+  if (!wW && wE && wN && wS) return "E";
+  if (!wE && wW && wN && wS) return "W";
+  if (wN) return "N";
+  if (wS) return "S";
+  if (wE) return "E";
+  if (wW) return "W";
+  return null;
+}
+
 // Entities that seal tiles until a key or a fight resolves them. For the
 // solvability invariant only LOCKED ones count as walls: unlocked doors open
 // by touch and monsters can be fought through.
