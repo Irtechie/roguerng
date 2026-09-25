@@ -112,6 +112,42 @@ async function walkTo(page, tx, ty, limit = 300) {
     check(`stairs take a 3-sided wall niche whenever one exists (${floors} floors)`, missedNiche === 0, `${missedNiche} misses`);
   }
 
+  // Old saves heal: re-create the classic seal (a locked strongroom door moved
+  // into the only open approach of the stairs), save it, and prove loadFrom
+  // unlocks it back into an escapable floor.
+  {
+    let tested = false, healed = false;
+    outer:
+    for (const seed of [1, 2, 3]) {
+      const c = new Core(seed);
+      c.start("fighter", "human", "Heal");
+      for (const mapId of Object.keys(MAPS)) {
+        for (let t = 1; t <= MAPS[mapId].tiers; t++) {
+          const m = c.getMap(mapId + ":d" + t);
+          const wall = (x, y) => x < 0 || y < 0 || y >= m.h || x >= m.w || m.grid[y][x] !== ".";
+          const st = m.stairs;
+          if (wall(st.x, st.y - 1) + wall(st.x, st.y + 1) + wall(st.x + 1, st.y) + wall(st.x - 1, st.y) !== 3) continue;
+          const open = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+            .map(([dx, dy]) => [st.x + dx, st.y + dy])
+            .find(([x, y]) => !wall(x, y));
+          const door = m.entities.find(e => e.type === "door");
+          if (!door || !open) continue;
+          door.locked = true; door.x = open[0]; door.y = open[1];
+          const save = c.toJSON();
+          const fresh = new Core(seed + 5000);
+          fresh.start("fighter", "human", "Healed");
+          if (!fresh.loadFrom(save)) continue;
+          const healedMap = fresh.maps.get(m.key);
+          const sealedDoor = healedMap.entities.find(e => e.type === "door" && e.x === open[0] && e.y === open[1]);
+          tested = true;
+          healed = fresh.escapable(healedMap) && !!sealedDoor && sealedDoor.locked === false;
+          break outer;
+        }
+      }
+    }
+    check("sealed sticky floors from old saves heal on load", tested && healed);
+  }
+
   const browser = await chromium.launch({
     args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
   });

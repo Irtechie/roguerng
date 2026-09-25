@@ -1068,6 +1068,17 @@ export class Core {
     this.screen = "play";
     this.dead = false;
     this.maps = new Map((data.maps || []).map(m => [m.key, { ...m, floors: null }]));
+    // Heal sticky floors saved before the no-soft-lock rule: if some combo of
+    // locked doors and chests would seal the stairs, unlock the doors first
+    // and the chests second, so an older save can never keep its hero trapped.
+    for (const map of this.maps.values()) {
+      if (map.kind !== "dungeon" || !map.stairs) continue;
+      if (this.escapable(map)) continue;
+      for (const e of map.entities || []) if (e.type === "door" && e.locked) e.locked = false;
+      if (!this.escapable(map)) {
+        for (const e of map.entities || []) if (e.type === "chest" && e.locked) e.locked = false;
+      }
+    }
     if (this.player && this.eff()) { /* derived stats recompute from attrs+gear */ }
     return true;
   }
