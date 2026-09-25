@@ -6,7 +6,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { chromium } from "playwright";
-import { SKILLS } from "../src/data.js";
+import { SKILLS, MAPS } from "../src/data.js";
+import { Core } from "../src/core.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json", ".png": "image/png" };
@@ -75,6 +76,28 @@ async function walkTo(page, tx, ty, limit = 300) {
 
 (async () => {
   const srv = await serve();
+
+  // Node-side sweep: every generated floor must be escapable — stairs down
+  // and the return portal reachable from spawn with the strongroom door and
+  // every locked chest still shut. Ten worlds, all maps, every tier.
+  {
+    let floors = 0, sealed = 0;
+    for (const seed of [1, 2, 3, 5, 8, 13, 21, 34, 55, 89]) {
+      const c = new Core(seed);
+      c.start("fighter", "human", "Sweep");
+      for (const mapId of Object.keys(MAPS)) {
+        for (let tier = 1; tier <= MAPS[mapId].tiers; tier++) {
+          floors++;
+          if (!c.escapable(c.getMap(mapId + ":d" + tier))) {
+            sealed++;
+            console.log("  sealed floor:", mapId + ":d" + tier, "seed", seed);
+          }
+        }
+      }
+    }
+    check(`every generated floor escapable (${floors} floors, 10 worlds)`, sealed === 0, `${sealed} sealed`);
+  }
+
   const browser = await chromium.launch({
     args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
   });
